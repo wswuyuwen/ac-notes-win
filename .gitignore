@@ -1,0 +1,20 @@
+# ---- 内部文档（产品相关，不上传 GitHub）----
+docs/
+CLAUDE.md
+
+# ---- .NET ----
+bin/
+obj/
+*.user
+*.suo
+
+# ---- IDE ----
+.vs/
+.idea/
+
+# ---- WebView2 运行时数据 ----
+*.WebView2/
+
+# ---- 日志 ----
+poc.log
+*.log

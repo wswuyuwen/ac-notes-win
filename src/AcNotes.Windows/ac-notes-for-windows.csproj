@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AssemblyName>AcNotes.Windows</AssemblyName>
+    <RootNamespace>AcNotes.Windows</RootNamespace>
+    <Version>0.1.0</Version>
+    <Product>AC Notes for Windows</Product>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2592.51" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="editor.html" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\panel-bg.jpg" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\footer-sea.svg" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\footer-tree.svg" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\footer-sea.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\footer-tree.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\animal_icon.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\ZCOOLKuaiLe-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\leaf.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\icon-chat.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\item-001.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\icon-design.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\icon-design.ico" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\cursor-hand.cur" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
