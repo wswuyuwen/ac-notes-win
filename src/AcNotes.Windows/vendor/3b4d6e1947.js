@@ -1,0 +1,3 @@
+/* esm.sh - @tiptap/extension-history@2.27.2 */
+import{Extension as d}from"./26ece8c6a9.js";import{undo as t,redo as e,history as n}from"./6b6ae2674e.js";var m=d.create({name:"history",addOptions(){return{depth:100,newGroupDelay:500}},addCommands(){return{undo:()=>({state:o,dispatch:r})=>t(o,r),redo:()=>({state:o,dispatch:r})=>e(o,r)}},addProseMirrorPlugins(){return[n(this.options)]},addKeyboardShortcuts(){return{"Mod-z":()=>this.editor.commands.undo(),"Shift-Mod-z":()=>this.editor.commands.redo(),"Mod-y":()=>this.editor.commands.redo(),"Mod-\u044F":()=>this.editor.commands.undo(),"Shift-Mod-\u044F":()=>this.editor.commands.redo()}}});export{m as History,m as default};
+//# sourceMappingURL=extension-history.mjs.map

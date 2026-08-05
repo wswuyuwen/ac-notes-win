@@ -1,0 +1,3 @@
+/* esm.sh - @tiptap/extension-gapcursor@2.27.2 */
+import{Extension as t,callOrReturn as e,getExtensionField as l}from"./26ece8c6a9.js";import{gapCursor as n}from"./905adcc885.js";var p=t.create({name:"gapCursor",addProseMirrorPlugins(){return[n()]},extendNodeSchema(r){var o;let a={name:r.name,options:r.options,storage:r.storage};return{allowGapCursor:(o=e(l(r,"allowGapCursor",a)))!==null&&o!==void 0?o:null}}});export{p as Gapcursor,p as default};
+//# sourceMappingURL=extension-gapcursor.mjs.map

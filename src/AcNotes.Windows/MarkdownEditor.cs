@@ -55,8 +55,14 @@ namespace AcNotes.Windows
                     _webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
                     _webView.CoreWebView2.Settings.IsZoomControlEnabled = false;
                     _webView.CoreWebView2.WebMessageReceived += OnWebMessage;
-                    var htmlPath = Path.Combine(AppContext.BaseDirectory, "editor.html");
-                    _webView.CoreWebView2.Navigate("file:///" + htmlPath.Replace('\\', '/'));
+                    // 本地资源经虚拟主机映射加载（2026-08-05 本地化实测：file:// 页面加载 file:// 的
+                    // ES module 被 Chromium CORS 拦截（origin 'null'），esm.sh CDN 改为本地 vendor/ 后必须
+                    // 走 https://appassets.example/ 同源加载——WebView2 官方推荐方案，不触发真实网络请求）
+                    _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                        "appassets.example",
+                        AppContext.BaseDirectory,
+                        Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
+                    _webView.CoreWebView2.Navigate("https://appassets.example/editor.html");
                 }
             };
             _webView.NavigationCompleted += async (_, e) =>

@@ -23,6 +23,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Update="editor.html" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="vendor\**\*" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\panel-bg.jpg" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\footer-sea.svg" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\footer-tree.svg" CopyToOutputDirectory="PreserveNewest" />

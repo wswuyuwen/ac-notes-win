@@ -400,6 +400,11 @@ namespace AcNotes.Windows
         private readonly MarkdownTiptapEditor _editor = new();
         private readonly StackPanel _tabsPanel = new() { Orientation = Orientation.Horizontal }; // 标签条（横向流式，超宽走 ScrollViewer 横滑）
         private ScrollViewer? _tabsScroll; // 标签横向滚动容器（新建后定位到新标签）
+        // 鼠标左键拖拽平移标签条（2026-08-05 用户反馈"不能通过鼠标拖动滑动"；PanningMode 仅支持
+        // 触摸/触控板，鼠标拖拽需手动实现——移动 >5px 判定拖拽，轻点正常触发标签选中）
+        private bool _tabsDragging;
+        private double _tabsDragStartX;
+        private double _tabsDragOffset;
         // ⚠️ 水平滚轮（WM_MOUSEHWHEEL）：WPF 的 PreviewMouseWheel 只响应垂直滚轮（WM_MOUSEWHEEL），
         // 触控板双指横滑 / 鼠标水平滚轮发 WM_MOUSEHWHEEL（0x020E），WPF 无托管事件 → 标签区横滑无反应
         // （用户实测"超过标签组宽度后不能滑动"）。需 HwndSource hook 捕获后转 ScrollToHorizontalOffset。
@@ -655,6 +660,39 @@ namespace AcNotes.Windows
                 var scroller = (ScrollViewer)s!;
                 scroller.ScrollToHorizontalOffset(scroller.HorizontalOffset - e.Delta);
                 e.Handled = true;
+            };
+            // ⚠️ 鼠标左键拖拽平移（2026-08-05 用户反馈"只能触控板滑、鼠标不能拖动"）：
+            // PanningMode 仅支持触摸/触控板；拖拽平移 = 按下记录起点 → 移动 >5px 判定拖拽
+            //（捕获鼠标平移，拦截标签 Button 误触）→ 松开结束；轻点 <5px 不拖拽，正常选中标签
+            _tabsScroll.PreviewMouseLeftButtonDown += (s, e) =>
+            {
+                _tabsDragStartX = e.GetPosition(_tabsScroll).X;
+                _tabsDragOffset = _tabsScroll.HorizontalOffset;
+                _tabsDragging = false;
+            };
+            _tabsScroll.PreviewMouseMove += (s, e) =>
+            {
+                if (e.LeftButton != System.Windows.Input.MouseButtonState.Pressed) return;
+                double dx = e.GetPosition(_tabsScroll).X - _tabsDragStartX;
+                if (!_tabsDragging && Math.Abs(dx) > 5)
+                {
+                    _tabsDragging = true;
+                    _tabsScroll.CaptureMouse();
+                }
+                if (_tabsDragging)
+                {
+                    _tabsScroll.ScrollToHorizontalOffset(_tabsDragOffset - dx);
+                    e.Handled = true; // 拖拽中拦截，防标签 Button 误触
+                }
+            };
+            _tabsScroll.PreviewMouseLeftButtonUp += (s, e) =>
+            {
+                if (_tabsDragging)
+                {
+                    _tabsDragging = false;
+                    _tabsScroll.ReleaseMouseCapture();
+                    e.Handled = true; // 拖拽过的松开不算点击
+                }
             };
 
             var pager = new Border

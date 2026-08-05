@@ -1,0 +1,3 @@
+/* esm.sh - prosemirror-trailing-node@2.0.9 */
+import{Plugin as y,PluginKey as N}from"./fdf96d1244.js";var a=new N("trailingNode");function h(l){let{ignoredNodes:c=[],nodeName:i="paragraph"}=l??{},u=new Set([...c,i]),s,d;return new y({key:a,appendTransaction(t,o,e){let{doc:r,tr:n}=e,p=a.getState(e),g=r.content.size;if(p)return n.insert(g,s.create())},state:{init:(t,{doc:o,schema:e})=>{let r=e.nodes[i];if(!r)throw new Error(`Invalid node being used for trailing node extension: '${i}'`);return s=r,d=Object.values(e.nodes).map(n=>n).filter(n=>!u.has(n.name)),d.includes(o.lastChild?.type)},apply:(t,o)=>t.docChanged?d.includes(t.doc.lastChild?.type):o}})}export{h as trailingNode};
+//# sourceMappingURL=prosemirror-trailing-node.mjs.map
