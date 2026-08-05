@@ -25,6 +25,18 @@ macOS 动森笔记应用 [ac-notes](https://github.com/wswuyuwen) 的 Windows �
 - 运行 GUI 需 `DOTNET_ROOT=C:\dotnet`
 - 详见 CLAUDE.md
 
+## 发布
+
+双包发布（脚本 `scripts/publish.sh`）：
+
+| 包 | 体积 | 适用 | 说明 |
+|----|------|------|------|
+| `ac-notes-framework-dependent-<日期>.zip` | **2.5MB**（主力） | 已装 .NET 的机器 | 需 .NET 8 Desktop Runtime（x64）：https://dotnet.microsoft.com/download/dotnet/8.0 ；未装时双击 exe 会弹官方安装引导 |
+| `ac-notes-for-windows-win-x64.zip` | 70MB（免装版） | 普通用户 | 自包含，双击即用，无需装 .NET |
+
+- 编辑器依赖已本地化（vendor/ 147 文件，离线可用，初始化 ~1.5s）
+- 首次运行若弹 SmartScreen"未知发布者"→ 更多信息 → 仍要运行
+
 ## 里程碑
 
 - [x] 底座（继承 NotchNotes）：双窗口骨架 + WebView2+Tiptap 编辑器 + 标签页 + 双通道存储 + 托盘
