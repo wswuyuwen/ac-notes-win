@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="150" viewBox="0 0 1200 150" role="img" aria-labelledby="t d">
+  <title id="t">功能亮点</title><desc id="d">02 · FEATURES · 功能亮点</desc>
+  <defs><pattern id="g" width="34" height="34" patternUnits="userSpaceOnUse"><path d="M34 0H0V34" fill="none" stroke="#4a3f35" stroke-opacity=".045"/></pattern></defs>
+  <rect width="1200" height="150" rx="22" fill="#F2F7EF"/><rect width="1200" height="150" rx="22" fill="url(#g)"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB',sans-serif">
+    <text x="54" y="36" fill="#8a7b60" font-size="15" font-weight="700" letter-spacing="2.6">02 · FEATURES</text>
+    <rect x="54" y="52" width="50" height="5" rx="2.5" fill="#19c8b9"/>
+    <text x="54" y="114" fill="#4a3f35" font-size="43" font-weight="780">功能亮点</text>
+    <text x="1080" y="112" fill="#4a3f35" fill-opacity=".13" font-size="76" font-weight="820">02</text>
+    <!-- 待办 checkbox + 列表 motif -->
+    <rect x="1004" y="66" width="14" height="14" rx="3" fill="none" stroke="#8a7b60" stroke-width="2"/>
+    <path d="M1007 73 l2.5 2.5 l4 -4.5" stroke="#19c8b9" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="1032" cy="73" r="4" fill="#8ac68a"/>
+    <circle cx="1048" cy="73" r="4" fill="#19c8b9"/>
+    <text x="1062" y="78" fill="#8a7b60" font-size="18" font-weight="700">1.</text>
+    <path d="M1090 80 q7 -5 15 -10 q-4 8 -9 11 q-3 2 -6 1 q-2 -1 0 -2 Z" fill="#a8d8a0"/>
+  </g>
+</svg>

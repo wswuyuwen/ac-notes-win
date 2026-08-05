@@ -1,5 +1,7 @@
 # ---- 内部文档（产品相关，不上传 GitHub）----
-docs/
+docs/*
+!docs/screenshots/
+!docs/screenshots/**
 CLAUDE.md
 
 # ---- .NET ----
