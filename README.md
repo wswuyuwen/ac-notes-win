@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/screenshots/expanded.png" width="100%" alt="动森随手记 — 住在 Windows 屏幕顶部的动物之森风随手记：鼠标移到屏幕顶部中央，奶油色笔记面板展开，记完移开自动收起">
+  <img src="docs/screenshots/expanded.png" width="100%" alt="动森版随手记 — 住在 Windows 屏幕顶部的动物之森风随手记：鼠标移到屏幕顶部中央，奶油色笔记面板展开，记完移开自动收起">
 </p>
 
 # 动森版随手记 (ACNotes) for Windows
@@ -106,7 +106,7 @@ dotnet publish src/AcNotes.Windows -c Release -r win-x64 --self-contained true -
 - 界面引擎与架构：[NotchNotes](https://github.com/oil-oil/NotchNotes) (oil-oil)
 - Windows 底座：[NotchNotes for Windows](https://github.com/wswuyuwen) 技术验证（双窗口 / WebView2+Tiptap / 全局钩子）
 - 动森视觉体系：[animal-island-ui](https://github.com/guokaigdg/animal-island-ui) (guokaigdg, CC BY-NC 4.0) —— 色值、组件样式、背景素材与图标设计均参考自此库
-- macOS 原版：[ac-notes](https://github.com/wswuyuwen/ac-notes)（SwiftUI 动森随手记，视觉蓝本）
+- macOS 原版：[ac-notes](https://github.com/wswuyuwen/ac-notes)（SwiftUI 动森版随手记，视觉蓝本）
 - 编辑器内核：[Tiptap](https://tiptap.dev) / [ProseMirror](https://prosemirror.net)（MIT）
 
 ## 注意事项
