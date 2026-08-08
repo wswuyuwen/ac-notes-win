@@ -6,6 +6,8 @@
 
 > 🍃 住在 Windows 屏幕顶部的动物之森风随手记
 
+[![CI](https://github.com/wswuyuwen/ac-notes-for-windows/actions/workflows/ci.yml/badge.svg)](https://github.com/wswuyuwen/ac-notes-for-windows/actions/workflows/ci.yml)
+
 **鼠标移到屏幕顶部中央**，奶油色的笔记面板便随之展开；记完移开鼠标，自动收起 —— 全程不打断你正在用的应用。macOS 版 [ac-notes](https://github.com/wswuyuwen/ac-notes) 的 Windows 移植（基于 NotchNotes for Windows 底座换肤）。
 
 灵感来源于开源项目 [NotchNotes](https://github.com/oil-oil/NotchNotes)，感谢开源社区的强大：
@@ -111,9 +113,16 @@ dotnet publish src/AcNotes.Windows -c Release -r win-x64 --self-contained true -
 
 ## 注意事项
 
-- 本项目仅用于个人学习、研究与非商业展示，禁止任何形式的商业使用、二次售卖或盈利行为。
+- 本项目整体为非商业项目：允许学习、研究、个人使用与非商业展示，禁止任何形式的商业使用、二次售卖或盈利行为。
 - 不用于任何商业产品、企业项目、对外服务或付费模板。
 - 使用本项目产生的任何风险由使用者自行承担。
+
+## License
+
+- **本项目原创代码与素材**：[MIT](LICENSE)
+- **UI 视觉层**：基于 [animal-island-ui](https://github.com/guokaigdg/animal-island-ui)（CC BY-NC 4.0），受其非商业限制约束
+
+> 综合上述两条：**本项目整体为非商业项目**。允许学习、研究、个人使用与非商业展示；禁止任何形式的商业使用。
 
 ## 版权与免责声明
 

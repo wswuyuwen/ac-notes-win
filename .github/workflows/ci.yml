@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore src/AcNotes.Windows/ac-notes-for-windows.csproj
+
+      - name: Build
+        run: dotnet build src/AcNotes.Windows/ac-notes-for-windows.csproj -c Release --no-restore
+
+      - name: Publish framework-dependent package
+        run: dotnet publish src/AcNotes.Windows/ac-notes-for-windows.csproj -c Release -r win-x64 --self-contained false -o publish/framework-dependent --no-restore
+
+      - name: Upload framework-dependent artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ac-notes-framework-dependent
+          path: publish/framework-dependent
