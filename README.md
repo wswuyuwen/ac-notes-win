@@ -6,7 +6,7 @@
 
 > 🍃 住在 Windows 屏幕顶部的动物之森风随手记
 
-[![CI](https://github.com/wswuyuwen/ac-notes-for-windows/actions/workflows/ci.yml/badge.svg)](https://github.com/wswuyuwen/ac-notes-for-windows/actions/workflows/ci.yml)
+[![CI](https://github.com/wswuyuwen/ac-notes-win/actions/workflows/ci.yml/badge.svg)](https://github.com/wswuyuwen/ac-notes-win/actions/workflows/ci.yml)
 
 **鼠标移到屏幕顶部中央**，奶油色的笔记面板便随之展开；记完移开鼠标，自动收起 —— 全程不打断你正在用的应用。macOS 版 [ac-notes](https://github.com/wswuyuwen/ac-notes) 的 Windows 移植（基于 NotchNotes for Windows 底座换肤）。
 
