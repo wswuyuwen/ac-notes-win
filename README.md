@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/wswuyuwen/ac-notes-win/actions/workflows/ci.yml/badge.svg)](https://github.com/wswuyuwen/ac-notes-win/actions/workflows/ci.yml)
 
-**鼠标移到屏幕顶部中央**，奶油色的笔记面板便随之展开；记完移开鼠标，自动收起 —— 全程不打断你正在用的应用。macOS 版 [ac-notes](https://github.com/wswuyuwen/ac-notes) 的 Windows 移植（基于 NotchNotes for Windows 底座换肤）。
+**鼠标移到屏幕顶部中央**，奶油色的笔记面板便随之展开；记完移开鼠标，自动收起 —— 全程不打断你正在用的应用。macOS 版 [ac-notes-mac](https://github.com/wswuyuwen/ac-notes-mac) 的 Windows 移植（基于 NotchNotes for Windows 底座换肤）。
 
 灵感来源于开源项目 [NotchNotes](https://github.com/oil-oil/NotchNotes)，感谢开源社区的强大：
 
@@ -108,7 +108,7 @@ dotnet publish src/AcNotes.Windows -c Release -r win-x64 --self-contained true -
 - 界面引擎与架构：[NotchNotes](https://github.com/oil-oil/NotchNotes) (oil-oil)
 - Windows 底座：[NotchNotes for Windows](https://github.com/wswuyuwen) 技术验证（双窗口 / WebView2+Tiptap / 全局钩子）
 - 动森视觉体系：[animal-island-ui](https://github.com/guokaigdg/animal-island-ui) (guokaigdg, CC BY-NC 4.0) —— 色值、组件样式、背景素材与图标设计均参考自此库
-- macOS 原版：[ac-notes](https://github.com/wswuyuwen/ac-notes)（SwiftUI 动森版随手记，视觉蓝本）
+- macOS 原版：[ac-notes-mac](https://github.com/wswuyuwen/ac-notes-mac)（SwiftUI 动森版随手记，视觉蓝本）
 - 编辑器内核：[Tiptap](https://tiptap.dev) / [ProseMirror](https://prosemirror.net)（MIT）
 
 ## 注意事项
