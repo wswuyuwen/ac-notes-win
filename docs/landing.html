@@ -1,0 +1,1718 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="tree">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="动森版随手记：住在屏幕顶部的奶油色笔记本。鼠标滑过即展开，记完自动收起，不打断当前应用。"
+    />
+    <title>动森版随手记 · ACNotes</title>
+    <style>
+      @font-face {
+        font-family: "ZCOOL KuaiLe";
+        src: url("landing-assets/fonts/ZCOOLKuaiLe-Regular.ttf") format("truetype");
+        font-display: swap;
+      }
+
+      :root {
+        --bg: #f5f0e8;
+        --paper: #faf7f2;
+        --paper-deep: #f7f3df;
+        --ink: #2a2118;
+        --ink-soft: #6b5b45;
+        --wood: #725d42;
+        --tree: #62b98b;
+        --tree-soft: rgba(98, 185, 139, 0.18);
+        --sea: #98d2e3;
+        --sea-soft: rgba(152, 210, 227, 0.22);
+        --sand: #c4b89e;
+        --shadow: rgba(42, 33, 24, 0.18);
+        --shadow-strong: rgba(42, 33, 24, 0.28);
+        --accent: var(--tree);
+        --accent-soft: var(--tree-soft);
+        --ease: cubic-bezier(0.19, 1, 0.22, 1);
+        --font-body: "ZCOOL KuaiLe", "Hiragino Maru Gothic ProN", "PingFang SC",
+          "Microsoft YaHei", sans-serif;
+        --font-num: "Caveat", "ZCOOL KuaiLe", cursive;
+      }
+
+      :root[data-theme="sea"] {
+        --accent: var(--sea);
+        --accent-soft: var(--sea-soft);
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        min-height: 100vh;
+        overflow-x: hidden;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--font-body);
+        font-size: 17px;
+        line-height: 1.75;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .hover-mark {
+        position: relative;
+        display: inline-block;
+        width: fit-content;
+        max-width: 100%;
+        isolation: isolate;
+        transition: color 0.25s var(--ease), transform 0.25s var(--ease);
+      }
+
+      .hover-mark::before {
+        content: "";
+        position: absolute;
+        left: -2px;
+        right: -2px;
+        bottom: 0.08em;
+        height: 0.42em;
+        z-index: -1;
+        background: var(--accent-soft);
+        transform: scaleX(0);
+        transform-origin: left center;
+        transition: transform 0.45s var(--ease);
+      }
+
+      .hover-mark:hover::before,
+      .hover-mark:focus-visible::before {
+        transform: scaleX(1);
+      }
+
+      img {
+        display: block;
+        max-width: 100%;
+      }
+
+      .theme-shot {
+        grid-area: 1 / 1;
+      }
+
+      :root[data-theme="tree"] .sea-shot,
+      :root[data-theme="sea"] .tree-shot {
+        display: none;
+      }
+
+      .wrap {
+        width: min(1080px, calc(100% - 48px));
+        margin: 0 auto;
+      }
+
+      .site-header,
+      main,
+      footer {
+        position: relative;
+        z-index: 1;
+      }
+
+      .sk-card {
+        border-radius: 18px 22px 20px 24px / 22px 18px 24px 20px;
+      }
+
+      .sk-btn {
+        border-radius: 16px 20px 16px 22px / 20px 16px 22px 16px;
+      }
+
+      .sk-icon {
+        border-radius: 16px 18px 15px 19px / 18px 15px 19px 16px;
+      }
+
+      .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        border-bottom: 2.5px solid var(--ink);
+        background: color-mix(in srgb, var(--bg) 92%, transparent);
+        -webkit-backdrop-filter: blur(6px);
+        backdrop-filter: blur(6px);
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        height: 64px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin-right: auto;
+        font-size: 21px;
+        color: var(--ink);
+      }
+
+      .brand img {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        box-shadow: 2px 2px 0 var(--shadow);
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .nav-links a {
+        display: inline-block;
+        padding: 6px 12px;
+        color: var(--ink);
+        border: 2px solid transparent;
+        border-radius: 12px 14px 12px 16px / 14px 12px 16px 12px;
+        transition: color 0.25s var(--ease), transform 0.25s var(--ease);
+      }
+
+      .nav-links a:hover,
+      .nav-links a:focus-visible {
+        color: var(--accent);
+        transform: translateY(-1px);
+      }
+
+      .theme-toggle {
+        font-family: var(--font-body);
+        font-size: 14px;
+        color: var(--ink);
+        background: var(--accent-soft);
+        border: 2px solid var(--ink);
+        border-radius: 12px 14px 12px 16px / 14px 12px 16px 12px;
+        padding: 5px 12px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 42px;
+        align-items: center;
+        padding: 70px 0 64px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 20px;
+        padding: 4px 15px;
+        font-size: 14px;
+        color: var(--ink-soft);
+        border: 2px solid var(--ink-soft);
+        border-radius: 999px;
+      }
+
+      .badge::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--accent);
+        border: 1.5px solid var(--ink);
+      }
+
+      h1 {
+        max-width: 11em;
+        font-size: clamp(34px, 5.4vw, 56px);
+        line-height: 1.28;
+        font-weight: 400;
+      }
+
+      .hl {
+        position: relative;
+        color: var(--accent);
+        padding: 0 5px;
+        isolation: isolate;
+      }
+
+      .hl::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0.08em;
+        height: 0.42em;
+        z-index: -1;
+        background: var(--accent-soft);
+        transform: rotate(-0.6deg);
+      }
+
+      .hl::after {
+        content: "";
+        position: absolute;
+        left: 5px;
+        right: 5px;
+        bottom: 0.08em;
+        height: 0.42em;
+        z-index: -1;
+        background: var(--accent);
+        opacity: 0;
+        transform: scaleX(0) rotate(-0.6deg);
+        transform-origin: left center;
+        transition: transform 0.45s var(--ease), opacity 0.25s var(--ease);
+      }
+
+      .hl:hover::after,
+      .hl:focus-visible::after {
+        opacity: 0.22;
+        transform: scaleX(1) rotate(-0.6deg);
+      }
+
+      .hero-sub {
+        max-width: 30em;
+        margin: 22px 0 28px;
+        font-size: 19px;
+        color: var(--ink-soft);
+      }
+
+      .hero-ctas {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 11px 22px;
+        font-family: var(--font-body);
+        font-size: 18px;
+        color: var(--ink);
+        background: var(--paper);
+        border: 2.5px solid var(--ink);
+        box-shadow: 3px 3px 0 var(--ink);
+        cursor: pointer;
+        transition: transform 0.08s ease, box-shadow 0.08s ease;
+      }
+
+      .btn:hover {
+        transform: translate(-1px, -1px);
+        box-shadow: 4px 4px 0 var(--ink);
+      }
+
+      .btn:active {
+        transform: translate(2px, 2px);
+        box-shadow: 0 0 0 var(--ink);
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        border-color: var(--ink);
+      }
+
+      .hero-note {
+        margin-top: 18px;
+        font-size: 14px;
+        color: var(--ink-soft);
+      }
+
+      .hero-visual {
+        position: relative;
+        display: grid;
+        justify-items: center;
+        padding: 18px 12px 28px;
+      }
+
+      .visual-card {
+        width: min(430px, 100%);
+      }
+
+      .notch-strip {
+        width: min(250px, 62%);
+        margin: 0 auto 0;
+        position: relative;
+        z-index: 2;
+        box-shadow: 4px 5px 0 var(--shadow-strong);
+        transform: translateY(12px) rotate(-0.5deg);
+      }
+
+      .panel-frame {
+        position: relative;
+        display: grid;
+        width: 100%;
+        aspect-ratio: 960 / 880;
+        border-radius: 0;
+        overflow: visible;
+        box-shadow: 9px 12px 0 var(--shadow);
+      }
+
+      .panel-frame img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 0;
+      }
+
+      .visual-chip {
+        position: absolute;
+        z-index: 3;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 7px 14px;
+        font-size: 13px;
+        color: var(--ink);
+        background: rgba(255, 253, 246, 0.94);
+        border: 2px solid var(--ink);
+        box-shadow: 3px 3px 0 var(--shadow-strong);
+      }
+
+      .visual-chip::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--accent);
+        border: 1.5px solid var(--ink);
+      }
+
+      .chip-hover {
+        top: 4px;
+        right: 4px;
+        transform: rotate(2deg);
+      }
+
+      .chip-auto {
+        bottom: 4px;
+        left: 0;
+        transform: rotate(-1.5deg);
+      }
+
+      .section {
+        padding: 64px 0;
+      }
+
+      .sec-head {
+        max-width: 680px;
+        margin: 0 auto 44px;
+        text-align: center;
+      }
+
+      .sec-head h2 {
+        position: relative;
+        display: inline-block;
+        font-size: clamp(26px, 3.6vw, 38px);
+        font-weight: 400;
+      }
+
+      .sec-head h2::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -11px;
+        height: 8px;
+        background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='8' viewBox='0 0 120 8'%3E%3Cpath d='M2 5 Q 12 1 24 5 T 46 5 T 68 5 T 90 5 T 114 4' fill='none' stroke='%2362B98B' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E")
+          repeat-x;
+        background-size: 120px 8px;
+      }
+
+      :root[data-theme="sea"] .sec-head h2::after {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='8' viewBox='0 0 120 8'%3E%3Cpath d='M2 5 Q 12 1 24 5 T 46 5 T 68 5 T 90 5 T 114 4' fill='none' stroke='%2398D2E3' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E");
+      }
+
+      .sec-sub {
+        margin-top: 22px;
+        font-size: 17px;
+        color: var(--ink-soft);
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 22px;
+      }
+
+      .feature-card {
+        display: flex;
+        flex-direction: column;
+        min-height: 210px;
+        padding: 24px 22px;
+        background: var(--paper);
+        border: 2.5px solid var(--ink);
+        box-shadow: 4px 4px 0 var(--shadow);
+      }
+
+      .ico {
+        display: grid;
+        place-items: center;
+        width: 52px;
+        height: 52px;
+        margin-bottom: 14px;
+        background: var(--accent-soft);
+        border: 2.5px solid var(--ink);
+        transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease);
+      }
+
+      .ico svg {
+        width: 27px;
+        height: 27px;
+      }
+
+      .feature-card:hover .ico {
+        transform: translateY(-3px) rotate(-3deg);
+        box-shadow: 3px 3px 0 var(--shadow-strong);
+      }
+
+      .feature-card h3 {
+        margin-bottom: 8px;
+        font-size: 20px;
+        font-weight: 400;
+      }
+
+      .feature-card p {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+
+      .demo-band {
+        background: var(--paper);
+        border-block: 2.5px solid var(--ink);
+      }
+
+      .demo-grid {
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr;
+        gap: 46px;
+        align-items: center;
+      }
+
+      .demo-copy h2,
+      .detail-copy h2 {
+        margin-bottom: 16px;
+        font-size: clamp(26px, 3.4vw, 36px);
+        font-weight: 400;
+      }
+
+      .demo-copy p,
+      .detail-copy p {
+        color: var(--ink-soft);
+      }
+
+      .check-list {
+        margin-top: 16px;
+        list-style: none;
+      }
+
+      .check-list li {
+        position: relative;
+        padding-left: 34px;
+        margin-bottom: 10px;
+      }
+
+      .check-list li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 4px;
+        width: 20px;
+        height: 20px;
+        background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 13 Q 8 15 10 19 Q 14 9 21 4' fill='none' stroke='%2362B98B' stroke-width='3.4' stroke-linecap='round'/%3E%3C/svg%3E")
+          no-repeat center / contain;
+      }
+
+      :root[data-theme="sea"] .check-list li::before {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 13 Q 8 15 10 19 Q 14 9 21 4' fill='none' stroke='%2398D2E3' stroke-width='3.4' stroke-linecap='round'/%3E%3C/svg%3E");
+      }
+
+      .demo-card {
+        position: relative;
+        width: min(480px, 100%);
+        margin: 0 auto;
+        padding: 20px 20px 34px;
+        background: var(--bg);
+        border: 2.5px solid var(--ink);
+        box-shadow: 6px 7px 0 var(--shadow);
+      }
+
+      .demo-card {
+        transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease);
+      }
+
+      .demo-stage {
+        position: relative;
+        width: 100%;
+      }
+
+      .demo-strip {
+        width: min(220px, 58%);
+        margin: 0 auto;
+        position: relative;
+        z-index: 2;
+        box-shadow: 3px 4px 0 var(--shadow-strong);
+      }
+
+      .demo-panel {
+        display: grid;
+        width: 100%;
+        aspect-ratio: 960 / 880;
+        margin-top: 0;
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+        box-shadow: 6px 8px 0 var(--shadow);
+        transition: max-height 0.65s var(--ease), opacity 0.35s var(--ease),
+          margin-top 0.35s var(--ease);
+      }
+
+      .demo-stage:hover .demo-panel,
+      .demo-stage:focus-within .demo-panel {
+        max-height: 410px;
+        margin-top: 12px;
+        opacity: 1;
+      }
+
+      .demo-panel img {
+        width: 100%;
+        height: auto;
+        object-fit: contain;
+      }
+
+      .demo-caption {
+        position: absolute;
+        right: -18px;
+        bottom: -12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 7px 14px;
+        font-size: 13px;
+        color: var(--ink);
+        background: rgba(255, 253, 246, 0.94);
+        border: 2px solid var(--ink);
+        box-shadow: 3px 3px 0 var(--shadow-strong);
+        transform: rotate(1.4deg);
+      }
+
+      .demo-caption::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--accent);
+        border: 1.5px solid var(--ink);
+      }
+
+      .theme-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 26px;
+      }
+
+      .theme-card {
+        padding: 18px;
+        background: var(--paper);
+        border: 2.5px solid var(--ink);
+        box-shadow: 5px 6px 0 var(--shadow);
+      }
+
+      .theme-frame {
+        width: 100%;
+        aspect-ratio: 960 / 880;
+        box-shadow: 4px 5px 0 var(--shadow);
+      }
+
+      .theme-frame img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .theme-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 14px;
+      }
+
+      .theme-name {
+        font-size: 19px;
+      }
+
+      .theme-chip {
+        padding: 3px 12px;
+        font-size: 13px;
+        color: var(--ink);
+        background: var(--accent-soft);
+        border: 2px solid var(--accent);
+        border-radius: 999px;
+      }
+
+      .detail-grid {
+        display: grid;
+        grid-template-columns: 1fr 0.95fr;
+        gap: 46px;
+        align-items: center;
+      }
+
+      .detail-shot {
+        display: grid;
+        width: min(470px, 100%);
+        margin: 0 auto;
+        aspect-ratio: 960 / 880;
+        box-shadow: 8px 10px 0 var(--shadow);
+      }
+
+      .detail-shot img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .privacy-trio {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 22px;
+      }
+
+      .privacy-card {
+        padding: 24px 22px;
+        background: var(--paper);
+        border: 2.5px solid var(--ink);
+        box-shadow: 4px 4px 0 var(--shadow);
+      }
+
+      .feature-card,
+      .theme-card,
+      .privacy-card {
+        --card-tilt: 0deg;
+        transform: rotate(var(--card-tilt));
+        transition: transform 0.35s var(--ease), box-shadow 0.35s var(--ease);
+      }
+
+      .feature-card:nth-child(odd),
+      .theme-card:nth-child(odd) {
+        --card-tilt: -0.4deg;
+      }
+
+      .feature-card:nth-child(even),
+      .theme-card:nth-child(even) {
+        --card-tilt: 0.4deg;
+      }
+
+      .privacy-card:nth-child(odd) {
+        --card-tilt: -0.3deg;
+      }
+
+      .privacy-card:nth-child(even) {
+        --card-tilt: 0.3deg;
+      }
+
+      .feature-card:hover,
+      .theme-card:hover,
+      .privacy-card:hover {
+        transform: translateY(-5px) rotate(var(--card-tilt));
+        box-shadow: 7px 8px 0 var(--shadow-strong);
+      }
+
+      .demo-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 8px 10px 0 var(--shadow-strong);
+      }
+
+      .privacy-card h3 {
+        margin-bottom: 8px;
+        font-size: 20px;
+        font-weight: 400;
+      }
+
+      .privacy-card p {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+
+      .faq-list {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+
+      .faq-item {
+        --faq-radius: 10px;
+        position: relative;
+        margin-bottom: 14px;
+        background: var(--paper);
+        border: 2.5px solid var(--ink);
+        box-shadow: 3px 3px 0 var(--shadow);
+        border-radius: var(--faq-radius);
+      }
+
+      .faq-item {
+        transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease);
+      }
+
+      .faq-item:hover {
+        transform: translateY(-3px);
+        box-shadow: 5px 6px 0 var(--shadow-strong);
+      }
+
+      .faq-question {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        width: 100%;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 22px;
+        font-size: 18px;
+        font-family: var(--font-body);
+        text-align: left;
+        color: var(--ink);
+        background: var(--paper);
+        -webkit-appearance: none;
+        appearance: none;
+        border: 0;
+        border-radius: var(--faq-radius);
+        cursor: pointer;
+        list-style: none;
+      }
+
+      .faq-question::after {
+        content: "+";
+        font-family: var(--font-num);
+        font-size: 26px;
+        line-height: 1;
+        color: var(--accent);
+        transition: transform 0.15s;
+      }
+
+      .faq-question:hover {
+        color: var(--accent);
+      }
+
+      .faq-item.is-open .faq-question::after {
+        transform: rotate(45deg);
+      }
+
+      .faq-answer {
+        position: relative;
+        z-index: 1;
+        padding: 0 22px 18px;
+        background: var(--paper);
+        border-radius: 0 0 var(--faq-radius) var(--faq-radius);
+      }
+
+      .faq-answer[hidden] {
+        display: none;
+      }
+
+      .faq-answer p {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+
+      .footer-social-wrap {
+        display: grid;
+        gap: 18px;
+        padding: 24px 0 26px;
+        margin-bottom: 24px;
+        border-bottom: 2px dashed var(--sand);
+      }
+
+      .footer-social-head {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+      }
+
+      .footer-social-head h2 {
+        font-size: 22px;
+        font-weight: 400;
+        line-height: 1.3;
+      }
+
+      .footer-social-head span {
+        font-family: var(--font-num);
+        font-size: 17px;
+        color: var(--accent);
+      }
+
+      .footer-socials {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .footer-social-link {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        padding: 9px 10px;
+        background: var(--paper);
+        border: 2.5px solid var(--ink);
+        box-shadow: 4px 4px 0 var(--shadow);
+        transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease),
+          background-color 0.3s var(--ease);
+      }
+
+      .footer-social-link:nth-child(odd) {
+        transform: rotate(-0.4deg);
+      }
+
+      .footer-social-link:nth-child(even) {
+        transform: rotate(0.4deg);
+      }
+
+      .footer-social-link:hover,
+      .footer-social-link:focus-visible {
+        background: var(--accent-soft);
+        box-shadow: 6px 7px 0 var(--shadow-strong);
+        transform: rotate(0deg) translate(-2px, -2px);
+      }
+
+      .footer-social-index {
+        flex: 0 0 auto;
+        font-family: var(--font-num);
+        font-size: 13px;
+        line-height: 1;
+        color: var(--accent);
+      }
+
+      .footer-social-icon {
+        display: grid;
+        flex: 0 0 auto;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        color: var(--ink);
+        background: var(--accent-soft);
+        border: 2px solid var(--ink);
+      }
+
+      .footer-social-icon svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .footer-social-copy {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-width: 0;
+        line-height: 1.3;
+      }
+
+      .footer-social-copy strong {
+        font-size: 14px;
+        font-weight: 400;
+        color: var(--ink);
+      }
+
+      .footer-social-copy small {
+        max-width: 100%;
+        margin-top: 1px;
+        overflow-wrap: anywhere;
+        font-size: 11px;
+        color: var(--ink-soft);
+      }
+
+      .footer-social-arrow {
+        display: grid;
+        flex: 0 0 auto;
+        place-items: center;
+        width: 20px;
+        height: 20px;
+        color: var(--accent);
+        transition: transform 0.3s var(--ease);
+      }
+
+      .footer-social-link:hover .footer-social-arrow {
+        transform: translate(2px, -2px);
+      }
+
+      .footer-social-arrow svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      footer.site {
+        margin-top: 48px;
+        padding: 38px 0 46px;
+        border-top: 2.5px solid var(--ink);
+      }
+
+      .foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        font-size: 14px;
+        color: var(--ink-soft);
+      }
+
+      .foot-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+
+      .foot-links a:hover {
+        color: var(--accent);
+      }
+
+      .legal {
+        width: 100%;
+        font-size: 12px;
+        color: var(--sand);
+      }
+
+      html.has-cursor-fx,
+      html.has-cursor-fx * {
+        cursor: none !important;
+      }
+
+      .cursor-fx {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 99999;
+        pointer-events: none;
+        opacity: 0;
+        will-change: transform;
+        transition: opacity 0.25s;
+      }
+
+      .cursor-fx.on {
+        opacity: 1;
+      }
+
+      .cursor-fx .cf-arrow {
+        display: block;
+        margin: -3px 0 0 -4px;
+        filter: drop-shadow(0 1px 2px var(--shadow));
+        transform-origin: 4px 3px;
+        transition: opacity 0.2s cubic-bezier(0.33, 1, 0.68, 1),
+          transform 0.2s cubic-bezier(0.33, 1, 0.68, 1);
+      }
+
+      .cursor-fx .cf-arrow path {
+        fill: var(--ink);
+        stroke: var(--paper);
+        stroke-width: 2.2px;
+        stroke-linejoin: round;
+        paint-order: stroke;
+      }
+
+      .cursor-fx i {
+        position: absolute;
+        top: 0;
+        left: 0;
+        display: block;
+        width: 10px;
+        height: 10px;
+        margin: -5px 0 0 -5px;
+        background: var(--ink);
+        border-radius: 999px;
+        box-shadow: 0 1px 5px var(--shadow);
+        opacity: 0;
+        transform: scale(0.4);
+        transition: opacity 0.2s cubic-bezier(0.33, 1, 0.68, 1),
+          transform 0.2s cubic-bezier(0.33, 1, 0.68, 1),
+          width 0.2s cubic-bezier(0.33, 1, 0.68, 1),
+          height 0.2s cubic-bezier(0.33, 1, 0.68, 1),
+          margin 0.2s cubic-bezier(0.33, 1, 0.68, 1),
+          background-color 0.2s,
+          border-color 0.2s,
+          box-shadow 0.2s;
+      }
+
+      .cursor-fx.is-link .cf-arrow,
+      .cursor-fx.is-text .cf-arrow {
+        opacity: 0;
+        transform: scale(0.5);
+      }
+
+      .cursor-fx.is-link i,
+      .cursor-fx.is-text i {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      .cursor-fx.is-link i {
+        width: 24px;
+        height: 24px;
+        margin: -12px 0 0 -12px;
+        background: var(--accent-soft);
+        border: 1.5px solid var(--ink);
+        box-shadow: none;
+      }
+
+      .cursor-fx.is-text i {
+        width: 2px;
+        height: 20px;
+        margin: -10px 0 0 -1px;
+        border-radius: 2px;
+      }
+
+      :focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      @media (max-width: 860px) {
+        .hero {
+          grid-template-columns: 1fr;
+          padding-top: 42px;
+          text-align: center;
+        }
+
+        .footer-socials {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .hero-sub,
+        .hero-ctas,
+        .hero-note {
+          margin-inline: auto;
+        }
+
+        .hero-ctas {
+          justify-content: center;
+        }
+
+        .hero-visual {
+          order: -1;
+          padding-top: 4px;
+        }
+
+        .demo-grid,
+        .detail-grid {
+          grid-template-columns: 1fr;
+          gap: 34px;
+        }
+
+        .demo-copy,
+        .detail-copy {
+          text-align: center;
+        }
+
+        .check-list {
+          text-align: left;
+          display: inline-block;
+        }
+      }
+
+      @media (max-width: 700px) {
+        .nav-links {
+          display: none;
+        }
+
+        .theme-toggle {
+          font-size: 13px;
+          padding: 4px 9px;
+        }
+
+        .wrap {
+          width: min(100% - 32px, 1080px);
+        }
+
+        .footer-socials {
+          grid-template-columns: 1fr;
+        }
+
+        .footer-social-wrap {
+          padding-top: 24px;
+        }
+
+        .visual-chip {
+          font-size: 12px;
+          padding: 5px 10px;
+        }
+
+        .chip-auto {
+          left: 0;
+        }
+
+        .chip-hover {
+          right: 0;
+        }
+
+        .demo-caption {
+          right: 4px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        * {
+          transition: none !important;
+          animation: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="wrap nav">
+        <a class="brand" href="#top" aria-label="动森版随手记首页">
+          <img src="landing-assets/app-icon.png" alt="" />
+          <span class="hover-mark">动森版随手记</span>
+        </a>
+        <nav class="nav-links" aria-label="主导航">
+          <a href="#features">功能</a>
+          <a href="#demo">演示</a>
+          <a href="#themes">主题</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+        <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false">
+          切换 sea 主题
+        </button>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero wrap">
+        <div>
+          <span class="badge">macOS · Windows · 本地存储</span>
+          <h1>把灵感，<span class="hl">随手记</span>在屏幕顶部</h1>
+          <p class="hero-sub">
+            鼠标滑过屏幕顶部，奶油色笔记本展开；记完移开，自动收进刘海。不打断当前应用。
+          </p>
+          <div class="hero-ctas" id="download">
+            <a
+              class="btn btn-primary sk-btn"
+              href="https://github.com/wswuyuwen/ac-notes-mac/releases/download/v0.12.0/ac-notes-mac-v0.12.0.zip"
+            >
+              Mac 版下载
+            </a>
+            <a
+              class="btn btn-primary sk-btn"
+              href="https://github.com/wswuyuwen/ac-notes-win/releases/download/v0.10.0/ac-notes-win-x64.zip"
+            >
+              Windows 版下载
+            </a>
+            <a class="btn sk-btn" href="#features">看看功能</a>
+          </div>
+          <p class="hero-note">Mac 安装包 / Windows 免装版 · 无需账号 · 数据只存在本机</p>
+        </div>
+
+        <div class="hero-visual" aria-label="动森版随手记真实面板效果">
+          <div class="visual-card">
+            <img class="notch-strip" src="landing-assets/strip.png" alt="收起状态：屏幕顶部刘海条" />
+            <div class="panel-frame">
+              <img
+                class="theme-shot tree-shot"
+                src="landing-assets/panel-tree.png"
+                alt="展开状态：tree 森林主题笔记面板"
+              />
+              <img
+                class="theme-shot sea-shot"
+                src="landing-assets/panel-sea.png"
+                alt="展开状态：sea 海之主题笔记面板"
+              />
+            </div>
+          </div>
+          <span class="visual-chip chip-hover">鼠标滑过刘海即展开</span>
+          <span class="visual-chip chip-auto">Esc 随时收起</span>
+        </div>
+      </section>
+
+      <section class="section" id="features">
+        <div class="wrap">
+          <div class="sec-head">
+            <h2 class="hover-mark">一个小面板，藏下生活的全部碎片</h2>
+            <p class="sec-sub">不占 Dock、不占任务栏，面板只在你需要时出现。</p>
+          </div>
+          <div class="feature-grid">
+            <article class="feature-card sk-card">
+              <div class="ico sk-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#2A2118" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 3 L19 11 L12 13 L9 20 Z" />
+                  <path d="M5 3 L9 20 L12 13 L19 11" />
+                </svg>
+              </div>
+              <h3 class="hover-mark">悬浮即记</h3>
+              <p>鼠标滑过屏幕顶部，面板展开即写，不打断正在做的事。</p>
+            </article>
+
+            <article class="feature-card sk-card">
+              <div class="ico sk-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#2A2118" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 20 Q 8 18 20 5 L 16 2 L 3 16 Z" />
+                  <path d="M13 7 L 17 11" />
+                </svg>
+              </div>
+              <h3 class="hover-mark">所见即所得</h3>
+              <p>标题、粗体、待办、引用实时渲染，数据仍存标准 Markdown。</p>
+            </article>
+
+            <article class="feature-card sk-card">
+              <div class="ico sk-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#2A2118" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 3 H15 L19 7 V20 Q19 21 18 21 H6 Q5 21 5 20 V4 Q5 3 6 3 Z" />
+                  <path d="M8 3 V8 H14 V3 M7 16 H17 M7 19 H17" />
+                </svg>
+              </div>
+              <h3 class="hover-mark">输入即保存</h3>
+              <p>没有保存按钮，输入自动落盘双副本，退出时强制 flush。</p>
+            </article>
+
+            <article class="feature-card sk-card">
+              <div class="ico sk-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#2A2118" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="5" width="7" height="15" rx="2" />
+                  <rect x="13" y="5" width="7" height="15" rx="2" />
+                  <path d="M7 3 V5 M16.5 3 V5" />
+                </svg>
+              </div>
+              <h3 class="hover-mark">多标签随手记</h3>
+              <p>工作、生活、灵感分开记，点击标签即可切换。</p>
+            </article>
+
+            <article class="feature-card sk-card">
+              <div class="ico sk-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#2A2118" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3 Q 17 3 17 8 Q 17 12 20 13 L 4 13 Q 7 12 7 8 Q 7 3 12 3 Z" />
+                  <path d="M10 18 Q 12 21 14 18" />
+                </svg>
+              </div>
+              <h3 class="hover-mark">双主题换装</h3>
+              <p>sea 海之主题与 tree 森林主题一键切换，边框和标签联动换色。</p>
+            </article>
+
+            <article class="feature-card sk-card">
+              <div class="ico sk-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#2A2118" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 12 L13 7 L18 12 L13 17 Z" />
+                  <path d="M13 7 V19 M8 14 L5 14 Q3 14 3 16 L3 19 Q3 20 4 20 L7 20" />
+                </svg>
+              </div>
+              <h3 class="hover-mark">文件架</h3>
+              <p>拖文件到刘海暂存，拖出完成搬运，全程不打开 Finder。</p>
+            </article>
+
+            <article class="feature-card sk-card">
+              <div class="ico sk-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#2A2118" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="4" width="16" height="16" rx="2" />
+                  <circle cx="9" cy="9" r="2" />
+                  <path d="M4 17 L10 12 L13 15 L16 11 L20 15" />
+                </svg>
+              </div>
+              <h3 class="hover-mark">粘贴图片</h3>
+              <p>截图后直接粘贴，自动转 PNG 存库并内嵌显示。</p>
+            </article>
+
+            <article class="feature-card sk-card">
+              <div class="ico sk-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#2A2118" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="5" width="16" height="10" rx="2" />
+                  <path d="M9 19 H15 M12 15 V19" />
+                </svg>
+              </div>
+              <h3 class="hover-mark">不打扰</h3>
+              <p>按 Esc 快速收起，面板不会抢焦点，也不会挡工作区。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section demo-band" id="demo">
+        <div class="wrap demo-grid">
+          <div class="demo-copy">
+            <h2 class="hover-mark">真实运行效果，不是示意图</h2>
+            <p>下面这段是应用的真实面板：光标从右下角滑向刘海，奶油色面板展开，记完移开自动收起。</p>
+            <ul class="check-list">
+              <li>Hover 展开，移出自动收起</li>
+              <li>点击模式可保持展开</li>
+              <li>按 Esc 快速收起</li>
+            </ul>
+          </div>
+          <div class="demo-card">
+            <div class="demo-stage" tabindex="0" aria-label="演示：鼠标滑过展开，移开收缩">
+              <img class="demo-strip" src="landing-assets/strip.png" alt="顶部刘海条" />
+              <div class="demo-panel">
+                <img
+                  class="theme-shot tree-shot"
+                  src="landing-assets/panel-tree.png"
+                  alt="展开状态：tree 森林主题笔记面板"
+                />
+                <img
+                  class="theme-shot sea-shot"
+                  src="landing-assets/panel-sea.png"
+                  alt="展开状态：sea 海之主题笔记面板"
+                />
+              </div>
+            </div>
+            <span class="demo-caption">移开鼠标，自动收进刘海</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="themes">
+        <div class="wrap">
+          <div class="sec-head">
+            <h2 class="hover-mark">双主题，随主题切换换装</h2>
+            <p class="sec-sub">sea 海水淡蓝与 tree 森林绿，都是应用里主题切换时的同款强调色。</p>
+          </div>
+          <div class="theme-grid">
+            <figure class="theme-card sk-card">
+              <div class="theme-frame">
+                <img src="landing-assets/panel-sea.png" alt="sea 海之主题面板真实截图" />
+              </div>
+              <figcaption class="theme-meta">
+                <span class="theme-name hover-mark">sea 海之主题</span>
+                <span class="theme-chip">#98D2E3</span>
+              </figcaption>
+            </figure>
+            <figure class="theme-card sk-card">
+              <div class="theme-frame">
+                <img src="landing-assets/panel-tree.png" alt="tree 森林主题面板真实截图" />
+              </div>
+              <figcaption class="theme-meta">
+                <span class="theme-name hover-mark">tree 森林主题</span>
+                <span class="theme-chip">#62B98B</span>
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="section demo-band" id="detail">
+        <div class="wrap detail-grid">
+          <div class="detail-copy">
+            <h2 class="hover-mark">删除标签前，会认真问你一句</h2>
+            <p>误触减号不会直接删除笔记。弹出动森风格确认框，打字机缓缓打出提示，确认才会删除。</p>
+          </div>
+          <div class="detail-shot">
+            <img
+              class="theme-shot tree-shot"
+              src="landing-assets/modal-tree.png"
+              alt="删除确认模态框 tree 森林主题真实截图"
+            />
+            <img
+              class="theme-shot sea-shot"
+              src="landing-assets/modal-sea.png"
+              alt="删除确认模态框 sea 海之主题真实截图"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="privacy">
+        <div class="wrap">
+          <div class="sec-head">
+            <h2 class="hover-mark">你的笔记，只属于你的设备</h2>
+            <p class="sec-sub">没有云端同步，不收集内容，也不要求注册账号。</p>
+          </div>
+          <div class="privacy-trio">
+            <article class="privacy-card sk-card">
+              <h3 class="hover-mark">纯本地存储</h3>
+              <p>笔记保存在本机，并保留第二份本地副本，不经过任何服务器。</p>
+            </article>
+            <article class="privacy-card sk-card">
+              <h3 class="hover-mark">无需账号</h3>
+              <p>打开即用，不注册、不登录、不上传任何个人内容。</p>
+            </article>
+            <article class="privacy-card sk-card">
+              <h3 class="hover-mark">无追踪</h3>
+              <p>核心功能离线可用，不收集、不共享、不出售数据。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="faq">
+        <div class="wrap">
+          <div class="sec-head">
+            <h2 class="hover-mark">你可能想问</h2>
+          </div>
+          <div class="faq-list">
+            <article class="faq-item">
+              <button
+                class="faq-question"
+                id="faq-q-1"
+                type="button"
+                aria-expanded="false"
+                aria-controls="faq-a-1"
+              >
+                <span class="hover-mark">支持 macOS 和 Windows 吗？</span>
+              </button>
+              <div class="faq-answer" id="faq-a-1" role="region" aria-labelledby="faq-q-1" hidden>
+                <p>支持。macOS 版和 Windows 版都使用同一套动森风格面板和双主题。</p>
+              </div>
+            </article>
+            <article class="faq-item">
+              <button
+                class="faq-question"
+                id="faq-q-2"
+                type="button"
+                aria-expanded="false"
+                aria-controls="faq-a-2"
+              >
+                <span class="hover-mark">笔记数据存在哪里？</span>
+              </button>
+              <div class="faq-answer" id="faq-a-2" role="region" aria-labelledby="faq-q-2" hidden>
+                <p>数据只存在本机，包含主文件与本地副本，不依赖云端。</p>
+              </div>
+            </article>
+            <article class="faq-item">
+              <button
+                class="faq-question"
+                id="faq-q-3"
+                type="button"
+                aria-expanded="false"
+                aria-controls="faq-a-3"
+              >
+                <span class="hover-mark">会自动保存吗？</span>
+              </button>
+              <div class="faq-answer" id="faq-a-3" role="region" aria-labelledby="faq-q-3" hidden>
+                <p>会。输入停止后自动落盘，不需要手动点击保存按钮。</p>
+              </div>
+            </article>
+            <article class="faq-item">
+              <button
+                class="faq-question"
+                id="faq-q-4"
+                type="button"
+                aria-expanded="false"
+                aria-controls="faq-a-4"
+              >
+                <span class="hover-mark">面板会不会挡到正在用的应用？</span>
+              </button>
+              <div class="faq-answer" id="faq-a-4" role="region" aria-labelledby="faq-q-4" hidden>
+                <p>不会抢焦点。需要时展开，记完或按 Esc 后自动收进屏幕顶部。</p>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site">
+      <div class="wrap footer-social-wrap">
+        <div class="footer-social-head">
+          <h2>也在这些地方找我</h2>
+          <span aria-hidden="true">social</span>
+        </div>
+        <nav class="footer-socials" aria-label="社交媒体和联系方式">
+          <a
+            class="footer-social-link sk-card"
+            href="https://www.xiaohongshu.com/user/profile/5b386d204eacab7f3c7f6c48"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span class="footer-social-index" aria-hidden="true">01</span>
+            <span class="footer-social-icon sk-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 4.5C5 3.7 5.7 3 6.5 3h4c.8 0 1.5.7 1.5 1.5V19c-.7-.8-1.6-1.2-2.6-1.2h-2.9c-.8 0-1.5-.7-1.5-1.5V4.5Z" />
+                <path d="M19 4.5c0-.8-.7-1.5-1.5-1.5h-4c-.8 0-1.5.7-1.5 1.5V19c.7-.8 1.6-1.2 2.6-1.2h2.9c.8 0 1.5-.7 1.5-1.5V4.5Z" />
+                <path d="M9 7.5h2M14 7.5h2M9 11.5h2M14 11.5h2" />
+              </svg>
+            </span>
+            <span class="footer-social-copy">
+              <strong>小红书</strong>
+              <small>xiaohongshu.com</small>
+            </span>
+            <span class="footer-social-arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 17 17 7M9 7h8v8" />
+              </svg>
+            </span>
+          </a>
+
+          <a
+            class="footer-social-link sk-card"
+            href="https://www.douyin.com/user/MS4wLjABAAAAxZ9Wp4Y9-uw0cf31kDQN4g-cktjtzGGRa8KnGI1zE-s"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span class="footer-social-index" aria-hidden="true">02</span>
+            <span class="footer-social-icon sk-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9.5 17.5V6.8c0-.4.3-.7.7-.8l6.5-1.8c.5-.1.9.3.9.8v1.8" />
+                <path d="M9.5 9.5l6.5-1.8" />
+                <circle cx="6.8" cy="17.5" r="2.7" />
+                <circle cx="15.8" cy="15.7" r="2.7" />
+              </svg>
+            </span>
+            <span class="footer-social-copy">
+              <strong>抖音</strong>
+              <small>douyin.com</small>
+            </span>
+            <span class="footer-social-arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 17 17 7M9 7h8v8" />
+              </svg>
+            </span>
+          </a>
+
+          <a
+            class="footer-social-link sk-card"
+            href="https://github.com/wswuyuwen"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span class="footer-social-index" aria-hidden="true">03</span>
+            <span class="footer-social-icon sk-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2.5c-5.2 0-9.5 4.2-9.5 9.5 0 4.2 2.7 7.8 6.5 9 .5.1.7-.2.7-.5v-1.7c-2.6.6-3.2-1.2-3.2-1.2-.4-1.1-1-1.4-1-1.4-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .8 1.5 2.2 1.1 2.8.8.1-.6.3-1.1.6-1.3-2.1-.2-4.3-1-4.3-4.5 0-1 .3-1.8.9-2.4-.1-.2-.4-1.2.1-2.4 0 0 .8-.3 2.5.9.7-.2 1.5-.3 2.3-.3.8 0 1.6.1 2.3.3 1.7-1.2 2.5-.9 2.5-.9.5 1.2.2 2.2.1 2.4.6.6.9 1.4.9 2.4 0 3.5-2.2 4.3-4.3 4.5.3.3.6.9.6 1.8v2.6c0 .3.2.6.7.5 3.8-1.2 6.5-4.8 6.5-9 0-5.3-4.3-9.5-9.5-9.5Z" />
+              </svg>
+            </span>
+            <span class="footer-social-copy">
+              <strong>GitHub</strong>
+              <small>@wswuyuwen</small>
+            </span>
+            <span class="footer-social-arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 17 17 7M9 7h8v8" />
+              </svg>
+            </span>
+          </a>
+
+          <a class="footer-social-link sk-card" href="mailto:wswuyuwen@163.com">
+            <span class="footer-social-index" aria-hidden="true">04</span>
+            <span class="footer-social-icon sk-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3.5" y="5.5" width="17" height="13" rx="2.5" />
+                <path d="m4.5 7 7.5 6 7.5-6" />
+              </svg>
+            </span>
+            <span class="footer-social-copy">
+              <strong>邮箱</strong>
+              <small>wswuyuwen@163.com</small>
+            </span>
+            <span class="footer-social-arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 17 17 7M9 7h8v8" />
+              </svg>
+            </span>
+          </a>
+        </nav>
+      </div>
+
+      <div class="wrap foot">
+        <span>随手记下，认真生活。</span>
+        <nav class="foot-links" aria-label="页脚导航">
+          <a
+            class="hover-mark"
+            href="https://github.com/wswuyuwen/ac-notes-mac/releases/download/v0.12.0/ac-notes-mac-v0.12.0.zip"
+          >
+            Mac 下载
+          </a>
+          <a
+            class="hover-mark"
+            href="https://github.com/wswuyuwen/ac-notes-win/releases/download/v0.10.0/ac-notes-win-x64.zip"
+          >
+            Windows 下载
+          </a>
+          <a class="hover-mark" href="https://github.com/wswuyuwen/ac-notes-mac/issues">反馈</a>
+        </nav>
+        <span class="legal">仅供学习研究，非商用 · 非任天堂官方产品 · 不使用官方素材</span>
+      </div>
+    </footer>
+
+    <div class="cursor-fx" aria-hidden="true">
+      <svg class="cf-arrow" viewBox="0 0 24 24" width="22" height="22">
+        <path d="M5.5 3.2 L18.8 11.4 L12.6 12.8 L9.9 19.6 Z" />
+      </svg>
+      <i></i>
+    </div>
+
+    <script>
+      const themeToggle = document.getElementById("themeToggle");
+      const root = document.documentElement;
+
+      themeToggle.addEventListener("click", () => {
+        const next = root.dataset.theme === "tree" ? "sea" : "tree";
+        root.dataset.theme = next;
+        themeToggle.textContent = next === "tree" ? "切换 sea 主题" : "切换 tree 主题";
+        themeToggle.setAttribute("aria-pressed", next === "sea" ? "true" : "false");
+      });
+
+      document.querySelectorAll(".faq-question").forEach((button) => {
+        button.addEventListener("click", () => {
+          const item = button.closest(".faq-item");
+          const answer = item.querySelector(".faq-answer");
+          const willOpen = answer.hidden;
+
+          answer.hidden = !willOpen;
+          button.setAttribute("aria-expanded", String(willOpen));
+          item.classList.toggle("is-open", willOpen);
+        });
+      });
+
+      const cursorFx = document.querySelector(".cursor-fx");
+      const canMatchMedia = typeof window.matchMedia === "function";
+      const pointerFine =
+        canMatchMedia && window.matchMedia("(pointer: fine)").matches;
+      const reducedMotion =
+        canMatchMedia &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      if (cursorFx && pointerFine && !reducedMotion) {
+        let hasMoved = false;
+        let isText = false;
+        let isLink = false;
+
+        root.classList.add("has-cursor-fx");
+
+        const moveCursor = (event) => {
+          cursorFx.style.transform = `translate3d(${event.clientX}px, ${event.clientY}px, 0)`;
+          if (!hasMoved) {
+            hasMoved = true;
+            cursorFx.classList.add("on");
+          }
+        };
+
+        const updateCursorState = (event) => {
+          const target = event.target;
+          if (!(target instanceof Element)) return;
+
+          const nextText = Boolean(
+            target.closest('input, textarea, [contenteditable="true"]')
+          );
+          const nextLink = Boolean(
+            target.closest(
+              'a, button, [role="button"], select, label, summary, .hover-mark, .hl'
+            )
+          );
+
+          if (nextText !== isText || nextLink !== isLink) {
+            isText = nextText;
+            isLink = nextLink;
+            cursorFx.classList.toggle("is-text", isText);
+            cursorFx.classList.toggle("is-link", isLink);
+          }
+        };
+
+        const hideCursor = () => {
+          hasMoved = false;
+          isText = false;
+          isLink = false;
+          cursorFx.classList.remove("on", "is-text", "is-link");
+        };
+
+        window.addEventListener("pointermove", moveCursor, { passive: true });
+        window.addEventListener("pointerover", updateCursorState, { passive: true });
+        root.addEventListener("mouseleave", hideCursor);
+      }
+
+    </script>
+  </body>
+</html>
