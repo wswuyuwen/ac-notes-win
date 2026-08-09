@@ -34,6 +34,8 @@ namespace AcNotes.Windows
 
         public event Action? ContentChanged;
         public event Action? SelectionChanged;
+        public event Action<string>? ContentPayloadReceived;
+        public event Action<int, int>? SelectionPayloadReceived;
 
         public UIElement View => _webView;
         public bool IsReady => _ready;
@@ -120,15 +122,55 @@ namespace AcNotes.Windows
 
         private void OnWebMessage(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs e)
         {
-            var msg = e.WebMessageAsJson.Trim('"');
-            switch (msg)
+            try
             {
-                case "content":
-                    ContentChanged?.Invoke();
-                    break;
-                case "selection":
-                    SelectionChanged?.Invoke();
-                    break;
+                using var document = JsonDocument.Parse(e.WebMessageAsJson);
+                var root = document.RootElement;
+
+                if (root.ValueKind == JsonValueKind.String)
+                {
+                    switch (root.GetString())
+                    {
+                        case "content":
+                            ContentChanged?.Invoke();
+                            break;
+                        case "selection":
+                            SelectionChanged?.Invoke();
+                            break;
+                    }
+                    return;
+                }
+
+                if (root.ValueKind != JsonValueKind.Object
+                    || !root.TryGetProperty("type", out var typeProperty)
+                    || typeProperty.ValueKind != JsonValueKind.String)
+                {
+                    return;
+                }
+
+                switch (typeProperty.GetString())
+                {
+                    case "content":
+                        if (root.TryGetProperty("html", out var htmlProperty)
+                            && htmlProperty.ValueKind == JsonValueKind.String)
+                        {
+                            ContentPayloadReceived?.Invoke(htmlProperty.GetString() ?? "");
+                        }
+                        break;
+                    case "selection":
+                        if (root.TryGetProperty("from", out var fromProperty)
+                            && root.TryGetProperty("to", out var toProperty)
+                            && fromProperty.ValueKind == JsonValueKind.Number
+                            && toProperty.ValueKind == JsonValueKind.Number)
+                        {
+                            SelectionPayloadReceived?.Invoke(fromProperty.GetInt32(), toProperty.GetInt32());
+                        }
+                        break;
+                }
+            }
+            catch
+            {
+                // Keep the old string bridge working if editor.html is ever cached.
             }
         }
 

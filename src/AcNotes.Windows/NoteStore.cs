@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -54,6 +55,7 @@ namespace AcNotes.Windows
 
         private readonly string _archivePath;
         private readonly object _lock = new();
+        private readonly object _writeLock = new();
         private System.Threading.Timer? _saveTimer;
         private bool _dirty;
         private DeletedNote? _recentlyDeleted;
@@ -88,17 +90,23 @@ namespace AcNotes.Windows
 
         public void UpdateText(string nextText)
         {
-            if (Tabs[ActiveIndex].Text == nextText) return;
-            Tabs[ActiveIndex].Text = nextText;
-            ClampSelectionFor(ActiveTabId);
+            lock (_lock)
+            {
+                if (Tabs[ActiveIndex].Text == nextText) return;
+                Tabs[ActiveIndex].Text = nextText;
+                ClampSelectionFor(ActiveTabId);
+            }
             ScheduleSave();
         }
 
         public void AddTab()
         {
-            var tab = NoteTab.New();
-            Tabs.Add(tab);
-            ActiveTabId = tab.Id;
+            lock (_lock)
+            {
+                var tab = NoteTab.New();
+                Tabs.Add(tab);
+                ActiveTabId = tab.Id;
+            }
             ScheduleSave();
         }
 
@@ -106,49 +114,69 @@ namespace AcNotes.Windows
 
         public void RemoveTab(Guid id)
         {
-            if (Tabs.Count <= 1) return;
-            var index = Tabs.FindIndex(t => t.Id == id);
-            if (index < 0) return;
-
-            _recentlyDeleted = new DeletedNote { Tab = Tabs[index], Index = index };
-            Tabs.RemoveAt(index);
-            if (id == ActiveTabId)
+            bool removed = false;
+            lock (_lock)
             {
-                var next = Math.Min(index, Tabs.Count - 1);
-                ActiveTabId = Tabs[next].Id;
+                if (Tabs.Count <= 1) return;
+                var index = Tabs.FindIndex(t => t.Id == id);
+                if (index < 0) return;
+
+                _recentlyDeleted = new DeletedNote { Tab = Tabs[index], Index = index };
+                Tabs.RemoveAt(index);
+                if (id == ActiveTabId)
+                {
+                    var next = Math.Min(index, Tabs.Count - 1);
+                    ActiveTabId = Tabs[next].Id;
+                }
+                removed = true;
             }
-            ScheduleSave();
+            if (removed) ScheduleSave();
         }
 
         public bool CanRestoreDeletedNote => _recentlyDeleted != null;
 
         public void RestoreLastDeletedTab()
         {
-            if (_recentlyDeleted == null) return;
-            var d = _recentlyDeleted;
-            var insertIndex = Math.Clamp(d.Index, 0, Tabs.Count);
-            Tabs.Insert(insertIndex, d.Tab);
-            ActiveTabId = d.Tab.Id;
-            _recentlyDeleted = null;
-            ScheduleSave();
+            bool restored = false;
+            lock (_lock)
+            {
+                if (_recentlyDeleted == null) return;
+                var d = _recentlyDeleted;
+                var insertIndex = Math.Clamp(d.Index, 0, Tabs.Count);
+                Tabs.Insert(insertIndex, d.Tab);
+                ActiveTabId = d.Tab.Id;
+                _recentlyDeleted = null;
+                restored = true;
+            }
+            if (restored) ScheduleSave();
         }
 
         public void SelectTab(Guid id)
         {
-            if (!Tabs.Any(t => t.Id == id) || id == ActiveTabId) return;
-            ActiveTabId = id;
-            ScheduleSave();
+            bool changed = false;
+            lock (_lock)
+            {
+                if (!Tabs.Any(t => t.Id == id) || id == ActiveTabId) return;
+                ActiveTabId = id;
+                changed = true;
+            }
+            if (changed) ScheduleSave();
         }
 
         public void UpdateSelection(Guid id, int start, int length)
         {
-            var index = Tabs.FindIndex(t => t.Id == id);
-            if (index < 0) return;
-            var (s, l) = ClampedRange(start, length, Tabs[index].Text);
-            if (Tabs[index].SelectionStart == s && Tabs[index].SelectionLength == l) return;
-            Tabs[index].SelectionStart = s;
-            Tabs[index].SelectionLength = l;
-            ScheduleSave();
+            bool changed = false;
+            lock (_lock)
+            {
+                var index = Tabs.FindIndex(t => t.Id == id);
+                if (index < 0) return;
+                var (s, l) = ClampedRange(start, length, Tabs[index].Text);
+                if (Tabs[index].SelectionStart == s && Tabs[index].SelectionLength == l) return;
+                Tabs[index].SelectionStart = s;
+                Tabs[index].SelectionLength = l;
+                changed = true;
+            }
+            if (changed) ScheduleSave();
         }
 
         public (int Start, int Length) SelectionRange(Guid id)
@@ -193,14 +221,14 @@ namespace AcNotes.Windows
             return text;
         }
 
-        public void Flush()
+        public void Flush(bool flushToDisk = true)
         {
             lock (_lock)
             {
                 _saveTimer?.Change(Timeout.Infinite, Timeout.Infinite);
                 _saveTimer = null;
             }
-            PersistNow();
+            PersistNow(flushToDisk);
         }
 
         // ---- 持久化 ----
@@ -215,7 +243,7 @@ namespace AcNotes.Windows
             }
         }
 
-        private void PersistNow()
+        private void PersistNow(bool flushToDisk = false)
         {
             PersistedNotes snapshot;
             lock (_lock)
@@ -225,7 +253,7 @@ namespace AcNotes.Windows
                 _saveTimer = null;
                 snapshot = new PersistedNotes
                 {
-                    Tabs = Tabs,
+                    Tabs = Tabs.Select(CloneNote).ToList(),
                     ActiveTabId = ActiveTabId,
                     SavedAt = DateTime.Now,
                 };
@@ -235,15 +263,54 @@ namespace AcNotes.Windows
             {
                 var json = JsonSerializer.Serialize(snapshot, JsonOpts);
                 // 主存档（原子写）
-                var dir = Path.GetDirectoryName(_archivePath)!;
-                Directory.CreateDirectory(dir);
-                var tmp = _archivePath + ".tmp";
-                File.WriteAllText(tmp, json);
-                File.Move(tmp, _archivePath, overwrite: true);
-                // 注册表兼容副本
-                try { Registry.SetValue(RegistryRootKey, RegistryJsonKey, json); } catch { }
+                lock (_writeLock)
+                {
+                    try
+                    {
+                        var dir = Path.GetDirectoryName(_archivePath)!;
+                        Directory.CreateDirectory(dir);
+                        var tmp = _archivePath + ".tmp";
+                        WriteAllTextWithFlush(tmp, json, flushToDisk);
+                        File.Move(tmp, _archivePath, overwrite: true);
+                        if (flushToDisk) FlushFile(_archivePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        try { File.Delete(_archivePath + ".tmp"); } catch { }
+                        try { Console.WriteLine($"[NoteStore] file persist failed: {ex}"); } catch { }
+                    }
+                    // 注册表兼容副本
+                    try { Registry.SetValue(RegistryRootKey, RegistryJsonKey, json); } catch { }
+                }
             }
-            catch { /* 双通道任一失败不影响另一通道 */ }
+            catch (Exception ex)
+            {
+                try { Console.WriteLine($"[NoteStore] serialize failed: {ex}"); } catch { }
+            }
+        }
+
+        private static NoteTab CloneNote(NoteTab tab) => new()
+        {
+            Id = tab.Id,
+            Text = tab.Text,
+            CreatedAt = tab.CreatedAt,
+            SelectionStart = tab.SelectionStart,
+            SelectionLength = tab.SelectionLength,
+        };
+
+        private static void WriteAllTextWithFlush(string path, string content, bool flushToDisk)
+        {
+            using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+            using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            writer.Write(content);
+            writer.Flush();
+            stream.Flush(flushToDisk);
+        }
+
+        private static void FlushFile(string path)
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+            stream.Flush(true);
         }
 
         private PersistedNotes? LoadLatestSnapshot()

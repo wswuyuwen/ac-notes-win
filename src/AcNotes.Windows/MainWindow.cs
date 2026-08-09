@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using NotifyIcon = System.Windows.Forms.NotifyIcon;
 using WpfMenuItem = System.Windows.Controls.MenuItem;
 
@@ -458,6 +459,7 @@ namespace AcNotes.Windows
         private bool _clickTrigger; // 触发模式：false=hover（默认）/ true=click（设置菜单切换）
         private bool _pinOpen;      // 点击展开固定：托盘/菜单展开后不因鼠标位置自动收起（用户 2026-08-04 修复）
         private DateTime _pinOpenAt; // 点击展开时刻（抑制点托盘那次的 MouseUp，防展开瞬间被点击外部收起）
+        private bool _closingFlushStarted;
         private Button? _settingsButton; // 设置菜单锚点（纯代码构建无 Name 注册，用字段引用）
 
         // ---- Win32 ----
@@ -552,7 +554,35 @@ namespace AcNotes.Windows
             // 页面脚本需要大/可见窗口），过早安装会让顶部鼠标误触发 Expand，与 SetProgress(0) 打架。
 
             Loaded += OnLoaded;
-            Closed += (_, _) => { _hook?.Dispose(); _keyHook?.Dispose(); _trayIcon?.Dispose(); _capsule.Close(); };
+            Closing += async (_, e) =>
+            {
+                if (_closingFlushStarted) return;
+                e.Cancel = true;
+                _closingFlushStarted = true;
+                try { await Task.WhenAny(SaveEditorStateAsync(), Task.Delay(1000)); } catch { }
+                _store.Flush(true);
+                Close();
+            };
+            Closed += (_, _) =>
+            {
+                _store.Flush(true);
+                _hook?.Dispose();
+                _keyHook?.Dispose();
+                _trayIcon?.Dispose();
+                _capsule.Close();
+            };
+            SystemEvents.SessionEnding += (_, _) =>
+            {
+                try { FlushForShutdown(); }
+                catch { _store.Flush(true); }
+            };
+            SystemEvents.PowerModeChanged += (_, e) =>
+            {
+                if (e.Mode != PowerModes.Suspend) return;
+                try { FlushForShutdown(); }
+                catch { _store.Flush(true); }
+            };
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => _store.Flush(true);
         }
 
         // ================= UI 构建 =================
@@ -713,6 +743,16 @@ namespace AcNotes.Windows
             cardInner.Children.Add(topTools);
 
             // ---- Tiptap 编辑器（WebView2 宿主；占位符/选区由 Tiptap 内置，内容存储为 HTML）----
+            _editor.ContentPayloadReceived += html =>
+            {
+                if (_loadingTab) return;
+                _store.UpdateText(html);
+            };
+            _editor.SelectionPayloadReceived += (from, to) =>
+            {
+                if (_loadingTab) return;
+                _store.UpdateSelection(_store.ActiveTabId, from, Math.Max(0, to - from));
+            };
             _editor.ContentChanged += async () =>
             {
                 if (_loadingTab) return;
@@ -722,7 +762,7 @@ namespace AcNotes.Windows
             {
                 if (_loadingTab) return;
                 var (f, t) = await _editor.GetSelectionAsync();
-                _store.UpdateSelection(_store.ActiveTabId, f, t);
+                _store.UpdateSelection(_store.ActiveTabId, f, Math.Max(0, t - f));
             };
 
             // ---- editor-card（动森：背景 cardInset #faf8f2 对齐 macOS 编辑区；内嵌 note-body 编辑器 + toolbar-row 底部工具栏）----
@@ -1552,7 +1592,44 @@ namespace AcNotes.Windows
             var md = await _editor.GetHtmlAsync();
             var (f, t) = await _editor.GetSelectionAsync();
             _store.UpdateText(md);
-            _store.UpdateSelection(_store.ActiveTabId, f, t);
+            _store.UpdateSelection(_store.ActiveTabId, f, Math.Max(0, t - f));
+        }
+
+        private void FlushForShutdown()
+        {
+            if (Dispatcher.CheckAccess())
+            {
+                _store.Flush(true);
+                return;
+            }
+
+            Task<string>? htmlTask = null;
+            Task<(int From, int To)>? selectionTask = null;
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    htmlTask = _editor.GetHtmlAsync();
+                    selectionTask = _editor.GetSelectionAsync();
+                });
+            }
+            catch { }
+
+            try { htmlTask?.Wait(TimeSpan.FromMilliseconds(800)); } catch { }
+            try { selectionTask?.Wait(TimeSpan.FromMilliseconds(800)); } catch { }
+
+            if (htmlTask?.IsCompletedSuccessfully == true)
+            {
+                _store.UpdateText(htmlTask.Result);
+            }
+            if (selectionTask?.IsCompletedSuccessfully == true)
+            {
+                _store.UpdateSelection(
+                    _store.ActiveTabId,
+                    selectionTask.Result.From,
+                    Math.Max(0, selectionTask.Result.To - selectionTask.Result.From));
+            }
+            _store.Flush(true);
         }
 
         private async Task LoadTabAsync(Guid id)
@@ -1757,6 +1834,7 @@ namespace AcNotes.Windows
             _editor.SetVisible(false);
             _editorVisible = false;
             SetProgress(0); // 瞬时收起（区域胶囊形状 + 内容隐藏）
+            _store.Flush(flushToDisk: false);
         }
 
         private void FadeContentOpacity(double from, double to, double seconds, Action? onCompleted = null)

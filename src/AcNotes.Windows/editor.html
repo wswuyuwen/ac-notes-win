@@ -169,8 +169,14 @@ window.__editor = new Editor({
   editorProps: {
     attributes: { spellcheck: 'false' },
   },
-  onUpdate: () => { window.chrome.webview.postMessage('content'); },
-  onSelectionUpdate: () => { window.chrome.webview.postMessage('selection'); },
+  onUpdate: () => window.chrome.webview.postMessage({
+    type: 'content',
+    html: window.__editor.getHTML(),
+  }),
+  onSelectionUpdate: () => {
+    const s = window.__editor.state.selection;
+    window.chrome.webview.postMessage({ type: 'selection', from: s.from, to: s.to });
+  },
 });
 
 // 宿主互操作桥（内容为 HTML）
