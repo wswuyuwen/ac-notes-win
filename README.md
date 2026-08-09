@@ -8,6 +8,8 @@
 
 [![CI](https://github.com/wswuyuwen/ac-notes-win/actions/workflows/ci.yml/badge.svg)](https://github.com/wswuyuwen/ac-notes-win/actions/workflows/ci.yml)
 
+**在线落地页**：[动森版随手记落地页](https://wswuyuwen.github.io/ac-notes-win/)
+
 **鼠标移到屏幕顶部中央**，奶油色的笔记面板便随之展开；记完移开鼠标，自动收起 —— 全程不打断你正在用的应用。macOS 版 [ac-notes-mac](https://github.com/wswuyuwen/ac-notes-mac) 的 Windows 移植（基于 NotchNotes for Windows 底座换肤）。
 
 灵感来源于开源项目 [NotchNotes](https://github.com/oil-oil/NotchNotes)，感谢开源社区的强大：
