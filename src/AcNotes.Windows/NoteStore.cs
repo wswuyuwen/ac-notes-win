@@ -31,14 +31,18 @@ namespace AcNotes.Windows
     }
 
     /// <summary>
-    /// 多标签笔记存储。双通道持久化：notes.json 主存档 + 注册表兼容副本，
-    /// 加载时按 savedAt 取较新快照（对应 macOS NoteStore 的 defaults/archive 双通道）。
+    /// 多标签笔记存储。持久化设计（2026-08-10 重构，目标：用户输入的每一个字实时落盘，关机/重启/断电不丢）：
+    /// - 实时写：无防抖延迟，每次内容变更立即入队后台写盘（写线程串行消费 + 合并积压，只写最新快照）
+    /// - 落盘即 fsync：每次写都 FlushFileBuffers 刷到介质（断电不丢已确认写入）
+    /// - 三副本：notes.json 主存档（tmp+Move 原子写）+ notes.json.bak 上次成功快照 + 注册表兼容副本
+    /// - 失败重试：写失败快照保留待重试，禁止静默丢失
+    /// - 关机路径：内存是唯一事实源（推路径实时同步），Flush 同步写内存快照，不依赖编辑器异步拉取
+    /// 加载时按 SavedAt 取较新快照，主文件损坏时逐级回退 .bak → .tmp → 注册表。
     /// </summary>
     public sealed class NoteStore
     {
         private const string RegistryRoot = @"Software\AcNotes";
         private const string RegistryJsonKey = "NotesJsonV1";
-        private const double SaveDelaySeconds = 0.18;
 
         private sealed class PersistedNotes
         {
@@ -54,10 +58,10 @@ namespace AcNotes.Windows
         }
 
         private readonly string _archivePath;
-        private readonly object _lock = new();
-        private readonly object _writeLock = new();
-        private System.Threading.Timer? _saveTimer;
-        private bool _dirty;
+        private readonly object _lock = new();        // 内存数据 + 写队列状态
+        private readonly object _writeLock = new();   // 磁盘写串行化（写线程 / Flush 互斥）
+        private PersistedNotes? _pendingWrite;        // 最新待写快照（合并写：只保留最新）
+        private bool _writeRunning;                   // 写线程是否活跃
         private DeletedNote? _recentlyDeleted;
 
         public List<NoteTab> Tabs { get; private set; } = new();
@@ -81,7 +85,8 @@ namespace AcNotes.Windows
                 ? preferred
                 : Tabs[0].Id;
 
-            PersistNow(); // 首次落盘，保证双通道同步
+            // 首次落盘：同步写内存快照（原子写 + fsync），保证双通道同步
+            PersistToDisk(TakeSnapshot());
         }
 
         public string Text => Tabs[ActiveIndex].Text;
@@ -221,54 +226,86 @@ namespace AcNotes.Windows
             return text;
         }
 
+        /// <summary>
+        /// 同步落盘：拍最新内存快照直接写盘（不走写队列），用于收起面板 / 关闭 / 关机路径。
+        /// 关闭/关机路径必须同步等待 fsync 完成再返回，保证数据落介质。
+        /// </summary>
         public void Flush(bool flushToDisk = true)
-        {
-            lock (_lock)
-            {
-                _saveTimer?.Change(Timeout.Infinite, Timeout.Infinite);
-                _saveTimer = null;
-            }
-            PersistNow(flushToDisk);
-        }
-
-        // ---- 持久化 ----
-
-        private void ScheduleSave()
-        {
-            lock (_lock)
-            {
-                _dirty = true;
-                _saveTimer ??= new Timer(_ => PersistNow(), null, 0, Timeout.Infinite);
-                _saveTimer.Change(TimeSpan.FromSeconds(SaveDelaySeconds), Timeout.InfiniteTimeSpan);
-            }
-        }
-
-        private void PersistNow(bool flushToDisk = false)
         {
             PersistedNotes snapshot;
             lock (_lock)
             {
-                _dirty = false;
-                _saveTimer?.Change(Timeout.Infinite, Timeout.Infinite);
-                _saveTimer = null;
-                snapshot = new PersistedNotes
-                {
-                    Tabs = Tabs.Select(CloneNote).ToList(),
-                    ActiveTabId = ActiveTabId,
-                    SavedAt = DateTime.Now,
-                };
+                snapshot = TakeSnapshot();
+                _pendingWrite = null; // 已同步写最新快照，作废写队列中的旧快照
             }
+            PersistToDisk(snapshot, flushToDisk);
+        }
 
+        // ---- 持久化 ----
+
+        /// <summary>
+        /// 实时写盘调度：每次内容变更立即入队（无防抖延迟），写线程串行消费并合并积压。
+        /// 慢速输入 = 每变更一写（实时）；快速输入 = 写线程持续写最新快照，磁盘永远追赶内存。
+        /// </summary>
+        private void ScheduleSave()
+        {
+            lock (_lock)
+            {
+                _pendingWrite = TakeSnapshot(); // 覆盖式合并：只保留最新快照
+                if (_writeRunning) return;      // 写线程活跃：写完会再取 pending
+                _writeRunning = true;
+            }
+            ThreadPool.QueueUserWorkItem(WriteLoop);
+        }
+
+        /// <summary>后台写线程：串行消费 pending 快照，写失败保留待重试（禁止静默丢失）</summary>
+        private void WriteLoop(object? _)
+        {
+            while (true)
+            {
+                PersistedNotes? snapshot;
+                lock (_lock)
+                {
+                    snapshot = _pendingWrite;
+                    _pendingWrite = null;
+                    if (snapshot == null) { _writeRunning = false; return; } // 队列空，退出
+                }
+
+                if (PersistToDisk(snapshot)) continue;
+
+                // 写失败：快照保留待重试（若期间已有更新的快照入队则让位），退出写循环
+                lock (_lock)
+                {
+                    if (_pendingWrite == null) _pendingWrite = snapshot;
+                    _writeRunning = false;
+                }
+                return;
+            }
+        }
+
+        /// <summary>持久化单次快照：主存档（原子写 + fsync）+ .bak 轮换 + 注册表副本。返回是否成功。</summary>
+        private bool PersistToDisk(PersistedNotes snapshot, bool flushToDisk = true)
+        {
             try
             {
                 var json = JsonSerializer.Serialize(snapshot, JsonOpts);
-                // 主存档（原子写）
                 lock (_writeLock)
                 {
                     try
                     {
                         var dir = Path.GetDirectoryName(_archivePath)!;
                         Directory.CreateDirectory(dir);
+                        // .bak 轮换：当前主文件 → 上次成功快照备份（防主文件被写坏/半写）
+                        try
+                        {
+                            if (File.Exists(_archivePath))
+                                File.Copy(_archivePath, _archivePath + ".bak", overwrite: true);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[NoteStore] bak copy failed: {ex.Message}");
+                        }
+                        // 主存档：tmp 原子写 + Move（崩溃时旧文件完好；首写崩溃时 .tmp 是唯一副本，加载侧可恢复）
                         var tmp = _archivePath + ".tmp";
                         WriteAllTextWithFlush(tmp, json, flushToDisk);
                         File.Move(tmp, _archivePath, overwrite: true);
@@ -277,17 +314,32 @@ namespace AcNotes.Windows
                     catch (Exception ex)
                     {
                         try { File.Delete(_archivePath + ".tmp"); } catch { }
-                        try { Console.WriteLine($"[NoteStore] file persist failed: {ex}"); } catch { }
+                        Console.WriteLine($"[NoteStore] file persist failed: {ex}");
+                        return false;
                     }
-                    // 注册表兼容副本
-                    try { Registry.SetValue(RegistryRootKey, RegistryJsonKey, json); } catch { }
+                    // 注册表兼容副本（次要通道：失败记录但不阻塞主存档）
+                    try { Registry.SetValue(RegistryRootKey, RegistryJsonKey, json); }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[NoteStore] registry persist failed: {ex.Message}");
+                    }
                 }
+                return true;
             }
             catch (Exception ex)
             {
-                try { Console.WriteLine($"[NoteStore] serialize failed: {ex}"); } catch { }
+                Console.WriteLine($"[NoteStore] serialize failed: {ex}");
+                return false;
             }
         }
+
+        /// <summary>拍当前内存的最新快照（在 _lock 保护下调用）</summary>
+        private PersistedNotes TakeSnapshot() => new()
+        {
+            Tabs = Tabs.Select(CloneNote).ToList(),
+            ActiveTabId = ActiveTabId,
+            SavedAt = DateTime.Now,
+        };
 
         private static NoteTab CloneNote(NoteTab tab) => new()
         {
@@ -318,14 +370,20 @@ namespace AcNotes.Windows
             PersistedNotes? fromFile = null;
             PersistedNotes? fromRegistry = null;
 
-            try
+            // 主存档 → .bak（上次成功快照）→ .tmp（崩溃恢复）逐级回退：
+            // - 主文件损坏（写坏/半写）→ 回退 .bak
+            // - 主+备份均缺失但 .tmp 存在 = 写 tmp 成功、Move 前崩溃（首写/重写）→ 恢复 .tmp
+            fromFile = TryLoadFile(_archivePath);
+            if (fromFile == null) fromFile = TryLoadFile(_archivePath + ".bak");
+            if (fromFile == null)
             {
-                if (File.Exists(_archivePath))
+                var tmpPath = _archivePath + ".tmp";
+                fromFile = TryLoadFile(tmpPath);
+                if (fromFile != null)
                 {
-                    fromFile = JsonSerializer.Deserialize<PersistedNotes>(File.ReadAllText(_archivePath), JsonOpts);
+                    try { File.Move(tmpPath, _archivePath, overwrite: true); } catch { }
                 }
             }
-            catch { }
 
             try
             {
@@ -344,6 +402,19 @@ namespace AcNotes.Windows
                 (_, not null) => fromRegistry,
                 _ => null,
             };
+        }
+
+        private static PersistedNotes? TryLoadFile(string path)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    return JsonSerializer.Deserialize<PersistedNotes>(File.ReadAllText(path), JsonOpts);
+                }
+            }
+            catch { }
+            return null;
         }
 
         private static readonly JsonSerializerOptions JsonOpts = new()

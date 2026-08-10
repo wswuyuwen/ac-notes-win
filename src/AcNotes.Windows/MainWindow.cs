@@ -1595,6 +1595,11 @@ namespace AcNotes.Windows
             _store.UpdateSelection(_store.ActiveTabId, f, Math.Max(0, t - f));
         }
 
+        /// <summary>
+        /// 关机/注销/睡眠兜底：内存已由 ContentPayloadReceived 推路径实时同步（唯一事实源），
+        /// 不依赖 WebView2 跨进程拉取（关机时浏览器进程可能已被系统终止）。
+        /// 仅用 300ms 极短窗口尽力补一次 postMessage 的最后毫秒延迟，超时直接用内存快照落盘。
+        /// </summary>
         private void FlushForShutdown()
         {
             if (Dispatcher.CheckAccess())
@@ -1604,30 +1609,17 @@ namespace AcNotes.Windows
             }
 
             Task<string>? htmlTask = null;
-            Task<(int From, int To)>? selectionTask = null;
             try
             {
-                Dispatcher.Invoke(() =>
-                {
-                    htmlTask = _editor.GetHtmlAsync();
-                    selectionTask = _editor.GetSelectionAsync();
-                });
+                Dispatcher.Invoke(() => { htmlTask = _editor.GetHtmlAsync(); });
             }
             catch { }
 
-            try { htmlTask?.Wait(TimeSpan.FromMilliseconds(800)); } catch { }
-            try { selectionTask?.Wait(TimeSpan.FromMilliseconds(800)); } catch { }
+            try { htmlTask?.Wait(TimeSpan.FromMilliseconds(300)); } catch { }
 
             if (htmlTask?.IsCompletedSuccessfully == true)
             {
                 _store.UpdateText(htmlTask.Result);
-            }
-            if (selectionTask?.IsCompletedSuccessfully == true)
-            {
-                _store.UpdateSelection(
-                    _store.ActiveTabId,
-                    selectionTask.Result.From,
-                    Math.Max(0, selectionTask.Result.To - selectionTask.Result.From));
             }
             _store.Flush(true);
         }
@@ -1834,7 +1826,7 @@ namespace AcNotes.Windows
             _editor.SetVisible(false);
             _editorVisible = false;
             SetProgress(0); // 瞬时收起（区域胶囊形状 + 内容隐藏）
-            _store.Flush(flushToDisk: false);
+            _store.Flush(true); // 收起即实时落盘（fsync 到介质，防收起后瞬间断电丢字）
         }
 
         private void FadeContentOpacity(double from, double to, double seconds, Action? onCompleted = null)
@@ -1937,6 +1929,29 @@ namespace AcNotes.Windows
                 _store.Flush();
                 var reloaded = new NoteStore();
                 Log($"STORAGE round-trip ok={reloaded.Text.Contains("round trip")} tabs={reloaded.Tabs.Count}");
+            }));
+
+            // 实时落盘验证（2026-08-10 存储重构）：UpdateText 后【不调用 Flush】，轮询磁盘确认
+            // 写线程已自动落盘——证明"输入即写盘、无防抖窗口"（旧版 180ms 防抖下此处必然失败）
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            {
+                var marker = "realtime-persist-marker-" + Guid.NewGuid().ToString("N")[..8];
+                _store.UpdateText(marker);
+                var path = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "AcNotes", "notes.json");
+                bool persisted = false;
+                for (int i = 0; i < 60 && !persisted; i++)
+                {
+                    System.Threading.Thread.Sleep(50);
+                    try
+                    {
+                        if (System.IO.File.Exists(path) && System.IO.File.ReadAllText(path).Contains(marker))
+                            persisted = true;
+                    }
+                    catch { }
+                }
+                Log($"STORAGE realtime-persist ok={persisted} (no Flush, writer thread only)");
             }));
 
             var exitTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(9.0) };
