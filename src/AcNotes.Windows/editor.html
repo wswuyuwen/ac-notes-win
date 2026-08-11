@@ -172,18 +172,25 @@ window.__editor = new Editor({
   onUpdate: () => window.chrome.webview.postMessage({
     type: 'content',
     html: window.__editor.getHTML(),
+    tabId: window.__currentTabId,   // 2026-08-11：payload 携带来源 tab，宿主按 id 写入防切 tab 错写
   }),
   onSelectionUpdate: () => {
     const s = window.__editor.state.selection;
-    window.chrome.webview.postMessage({ type: 'selection', from: s.from, to: s.to });
+    window.chrome.webview.postMessage({ type: 'selection', from: s.from, to: s.to, tabId: window.__currentTabId });
   },
 });
 
 // 宿主互操作桥（内容为 HTML）
+window.__currentTabId = null;   // 2026-08-11：当前编辑器内容归属的 tab（setContent 时注入）
 window.__notch = {
   getHTML: () => window.__editor.getHTML(),
-  setContent: (html, from, to) => {
-    window.__editor.commands.setContent(html, { emitUpdate: false });
+  setContent: (html, from, to, tabId) => {
+    window.__currentTabId = tabId ?? null;
+    // ⚠️ 2026-08-11 修复：Tiptap v2 setContent 签名是 (content, emitUpdate:boolean, parseOptions)，
+    // 此前传 { emitUpdate: false } 对象被当 truthy → emitUpdate=true → onUpdate 照常触发 →
+    // 启动注入内容时 payload 回写（含空文档 <p></p>）覆盖用户数据（实测清空 tab2）。
+    // 必须传 boolean false。
+    window.__editor.commands.setContent(html, false);
     if (from != null) {
       window.__editor.commands.setTextSelection({ from, to: to ?? from });
       window.__editor.commands.scrollIntoView();
@@ -218,7 +225,7 @@ window.__notch = {
     return true;
   },
   focus: () => window.__editor.commands.focus('end'),
-  clear: () => window.__editor.commands.clearContent({ emitUpdate: false }),
+  clear: () => window.__editor.commands.clearContent(false), // 2026-08-11：同 setContent，v2 第二参是 boolean
   getActive: () => ({
     bold: window.__editor.isActive('bold'),
     italic: window.__editor.isActive('italic'),

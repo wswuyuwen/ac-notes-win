@@ -31,11 +31,13 @@ namespace AcNotes.Windows
         private string _pendingMarkdown = "";
         private int? _pendingFrom;
         private int? _pendingTo;
+        private Guid? _pendingTabId; // 2026-08-11：pending 透传 tabId（防 FlushPending 注入后 payload 归位错误）
+        private string _lastHtml = ""; // 最后成功获取/设置的内容（2026-08-11：GetHtmlAsync 失败时兜底，防返回空串清空存储）
 
         public event Action? ContentChanged;
         public event Action? SelectionChanged;
-        public event Action<string>? ContentPayloadReceived;
-        public event Action<int, int>? SelectionPayloadReceived;
+        public event Action<Guid?, string>? ContentPayloadReceived;      // (tabId, html) 2026-08-11 携带来源 tab
+        public event Action<Guid?, int, int>? SelectionPayloadReceived;  // (tabId, from, to)
 
         public UIElement View => _webView;
         public bool IsReady => _ready;
@@ -102,7 +104,11 @@ namespace AcNotes.Windows
                 if (_ready)
                 {
                     FlushPending();
-                    ContentChanged?.Invoke();
+                    // ⚠️ 2026-08-11 修复：这里【不得】再触发 ContentChanged——就绪瞬间（LoadTabAsync 尚未执行）
+                    // 编辑器是 Tiptap 初始化空文档，GetHtmlAsync 返回 <p></p>（非空串，空值保护拦不住），
+                    // 经 ContentChanged 回调 UpdateText 会把用户真实内容覆盖成空文档（实测：启动加载阶段污染 tab2）。
+                    // 内容注入由 LoadTabAsync（_loadingTab 保护）负责，就绪同步是多余且有害的。
+                    // ContentChanged 仅保留给旧字符串桥（OnWebMessage 的 "content" 消息，兼容缓存旧版 editor.html）。
                 }
             };
         }
@@ -154,7 +160,8 @@ namespace AcNotes.Windows
                         if (root.TryGetProperty("html", out var htmlProperty)
                             && htmlProperty.ValueKind == JsonValueKind.String)
                         {
-                            ContentPayloadReceived?.Invoke(htmlProperty.GetString() ?? "");
+                            Guid? tabId = TryGetTabId(root);
+                            ContentPayloadReceived?.Invoke(tabId, htmlProperty.GetString() ?? "");
                         }
                         break;
                     case "selection":
@@ -163,7 +170,8 @@ namespace AcNotes.Windows
                             && fromProperty.ValueKind == JsonValueKind.Number
                             && toProperty.ValueKind == JsonValueKind.Number)
                         {
-                            SelectionPayloadReceived?.Invoke(fromProperty.GetInt32(), toProperty.GetInt32());
+                            Guid? tabId = TryGetTabId(root);
+                            SelectionPayloadReceived?.Invoke(tabId, fromProperty.GetInt32(), toProperty.GetInt32());
                         }
                         break;
                 }
@@ -181,11 +189,21 @@ namespace AcNotes.Windows
                 var md = _pendingMarkdown;
                 var from = _pendingFrom;
                 var to = _pendingTo;
+                var tabId = _pendingTabId; // 2026-08-11：透传来源 tab（此前丢失 → payload 归位错误）
                 _pendingMarkdown = "";
                 _pendingFrom = null;
                 _pendingTo = null;
-                _ = SetHtmlAsync(md, from, to);
+                _pendingTabId = null;
+                _ = SetHtmlAsync(md, from, to, tabId);
             }
+        }
+
+        /// <summary>解析消息中的 tabId（2026-08-11 起 editor.html 在 content/selection 消息中携带；旧消息无此字段返回 null）</summary>
+        private static Guid? TryGetTabId(System.Text.Json.JsonElement root)
+        {
+            if (!root.TryGetProperty("tabId", out var prop) || prop.ValueKind != System.Text.Json.JsonValueKind.String)
+                return null;
+            return Guid.TryParse(prop.GetString(), out var id) ? id : (Guid?)null;
         }
 
         // ---- 内容（存储格式：HTML，Tiptap 原生 getHTML/setContent）----
@@ -194,17 +212,20 @@ namespace AcNotes.Windows
         {
             // ⚠️ CoreWebView2 未创建时 ExecuteScriptAsync 永久挂起（不抛异常）——未就绪直接返回缓存，
             // 防 SaveEditorStateAsync/CreateNoteAsync 卡死（2026-08-04：残留进程锁环境 → 面板不展开）
-            if (!_ready) return _pendingMarkdown;
+            // 2026-08-11：失败不再返回空串——返回最后已知内容，防退出路径 SaveEditorStateAsync 拿 "" 清空存储
+            if (!_ready) return _lastHtml;
             try
             {
                 // ExecuteScriptAsync 返回合法 JSON 字符串（中文会转义为 \uXXXX），
                 // 必须 Deserialize<string> 才能得到真实 HTML
                 var json = await _webView.ExecuteScriptAsync("window.__notch.getHTML()");
-                return JsonSerializer.Deserialize<string>(json) ?? "";
+                var html = JsonSerializer.Deserialize<string>(json) ?? "";
+                if (!string.IsNullOrEmpty(html)) _lastHtml = html; // 成功则更新兜底缓存
+                return html;
             }
             catch
             {
-                return _pendingMarkdown;
+                return _lastHtml;
             }
         }
 
@@ -222,16 +243,19 @@ namespace AcNotes.Windows
             }
         }
 
-        public Task SetHtmlAsync(string html, int? from = null, int? to = null)
+        public Task SetHtmlAsync(string html, int? from = null, int? to = null, Guid? tabId = null)
         {
             if (!_ready)
             {
                 _pendingMarkdown = html;
                 _pendingFrom = from;
                 _pendingTo = to;
+                _pendingTabId = tabId; // 2026-08-11：pending 同步保存来源 tab，FlushPending 时透传
                 return Task.CompletedTask;
             }
-            var js = $"window.__notch.setContent({JsonSerializer.Serialize(html)}, {from?.ToString() ?? "null"}, {to?.ToString() ?? "null"})";
+            if (!string.IsNullOrEmpty(html)) _lastHtml = html; // 同步兜底缓存（2026-08-11）
+            var tabArg = tabId.HasValue ? $"\"{tabId}\"" : "null";
+            var js = $"window.__notch.setContent({JsonSerializer.Serialize(html)}, {from?.ToString() ?? "null"}, {to?.ToString() ?? "null"}, {tabArg})";
             return Execute(js);
         }
 

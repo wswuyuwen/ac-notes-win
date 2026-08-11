@@ -743,20 +743,30 @@ namespace AcNotes.Windows
             cardInner.Children.Add(topTools);
 
             // ---- Tiptap 编辑器（WebView2 宿主；占位符/选区由 Tiptap 内置，内容存储为 HTML）----
-            _editor.ContentPayloadReceived += html =>
+            _editor.ContentPayloadReceived += (tabId, html) =>
             {
+                var payloadTab = tabId.HasValue ? tabId.Value.ToString()[..Math.Min(8, tabId.Value.ToString().Length)] : "null";
+                Log($"PAYLOAD content tab={payloadTab} len={html.Length} loading={_loadingTab} html={(html.Length > 40 ? html[..40] : html)}");
                 if (_loadingTab) return;
-                _store.UpdateText(html);
+                // 2026-08-11：payload 携带来源 tab id（editor.html setContent 注入），按 id 写入，
+                // 防切 tab 瞬间旧 tab 延迟 payload 错写新 tab；旧消息无 tabId 回退 ActiveTabId
+                if (tabId.HasValue) _store.UpdateTextFor(tabId.Value, html);
+                else _store.UpdateText(html);
             };
-            _editor.SelectionPayloadReceived += (from, to) =>
+            _editor.SelectionPayloadReceived += (tabId, from, to) =>
             {
                 if (_loadingTab) return;
-                _store.UpdateSelection(_store.ActiveTabId, from, Math.Max(0, to - from));
+                if (tabId.HasValue) _store.UpdateSelection(tabId.Value, from, Math.Max(0, to - from));
+                else _store.UpdateSelection(_store.ActiveTabId, from, Math.Max(0, to - from));
             };
             _editor.ContentChanged += async () =>
             {
                 if (_loadingTab) return;
-                _store.UpdateText(await _editor.GetHtmlAsync());
+                var md = await _editor.GetHtmlAsync();
+                // 2026-08-11 加固：空白文档（<p></p> 等无实质内容）不得覆盖非空内容——启动竞态/旧桥
+                // 同步拿到的空文档若写入会把用户数据清空（实测污染路径之一）。用户主动清空由
+                // payload 路径（ContentPayloadReceived → UpdateTextFor）负责，此旧桥只做冗余兜底。
+                if (!string.IsNullOrEmpty(md) && !IsBlankHtml(md)) _store.UpdateText(md);
             };
             _editor.SelectionChanged += async () =>
             {
@@ -1629,7 +1639,7 @@ namespace AcNotes.Windows
             _loadingTab = true;
             var tab = _store.Tabs.First(t => t.Id == id);
             var (s, l) = _store.SelectionRange(id);
-            await _editor.SetHtmlAsync(tab.Text, s, s + l);
+            await _editor.SetHtmlAsync(tab.Text, s, s + l, id); // 2026-08-11：注入 tabId，编辑器上报 payload 携带来源
             _loadingTab = false;
         }
 
@@ -1922,36 +1932,60 @@ namespace AcNotes.Windows
                 Collapse();
             }));
 
-            // 存储往返验证：写文本 → Flush → 新实例读回
+            // 存储验证全部走独立临时 store（2026-08-11：selftest 不碰用户数据——此前直接写真实 store，
+            // 且各段 Dispatcher.BeginInvoke(Background) 与 smoke test 的 await 交错执行，备份/恢复互相踩踏，
+            // 实测把用户 tab2 清空成 <p></p>）。用临时路径后各段互不影响，也绝不污染 %APPDATA%\AcNotes。
+            var tempStorePath = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), "AcNotes-selftest-" + Guid.NewGuid().ToString("N")[..8] + ".json");
             Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
             {
-                _store.UpdateText("# Self-test note\nround trip");
-                _store.Flush();
-                var reloaded = new NoteStore();
+                // 1. 存储往返验证：写文本 → Flush → 新实例读回
+                // 2026-08-11：useRegistry:false——临时 store 完全隔离（文件走临时路径，注册表键跳过），
+                // 此前仅文件路径独立但注册表仍读写用户键，selftest 期间崩溃会把用户注册表副本污染成临时数据
+                var rt = new NoteStore(tempStorePath, useRegistry: false);
+                rt.UpdateText("# Self-test note\nround trip");
+                rt.Flush();
+                var reloaded = new NoteStore(tempStorePath, useRegistry: false);
                 Log($"STORAGE round-trip ok={reloaded.Text.Contains("round trip")} tabs={reloaded.Tabs.Count}");
-            }));
 
-            // 实时落盘验证（2026-08-10 存储重构）：UpdateText 后【不调用 Flush】，轮询磁盘确认
-            // 写线程已自动落盘——证明"输入即写盘、无防抖窗口"（旧版 180ms 防抖下此处必然失败）
-            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
-            {
+                // 2. 实时落盘验证（2026-08-10 存储重构）：UpdateText 后【不调用 Flush】，轮询磁盘确认
+                //    写线程已自动落盘——证明"输入即写盘、无防抖窗口"（旧版 180ms 防抖下此处必然失败）
                 var marker = "realtime-persist-marker-" + Guid.NewGuid().ToString("N")[..8];
-                _store.UpdateText(marker);
-                var path = System.IO.Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "AcNotes", "notes.json");
+                rt.UpdateText(marker);
                 bool persisted = false;
                 for (int i = 0; i < 60 && !persisted; i++)
                 {
                     System.Threading.Thread.Sleep(50);
                     try
                     {
-                        if (System.IO.File.Exists(path) && System.IO.File.ReadAllText(path).Contains(marker))
+                        if (System.IO.File.Exists(tempStorePath) && System.IO.File.ReadAllText(tempStorePath).Contains(marker))
                             persisted = true;
                     }
                     catch { }
                 }
                 Log($"STORAGE realtime-persist ok={persisted} (no Flush, writer thread only)");
+
+                // 3. 空值保护验证（2026-08-11 排查"退出后选中 tab 内容丢失"）：
+                //    UpdateText("") 不得清空已有内容（GetHtmlAsync 失败产物是 ""，Tiptap 空文档是 <p></p>）
+                rt.UpdateText("# 保护内容" + System.Environment.NewLine + "不要清空");
+                rt.Flush();
+                rt.UpdateText("");  // 模拟异常路径空串
+                rt.Flush();
+                var protectedText = rt.Text;
+                Log($"STORAGE empty-protect ok={protectedText.Contains("保护内容")} (empty rejected, content kept)");
+
+                // 4. 按 tab id 写入验证（2026-08-11 切 tab 竞态修复）：UpdateTextFor 定位正确 tab
+                rt.AddTab();  // 造第二个 tab
+                var target = rt.Tabs[0].Id;
+                rt.UpdateTextFor(target, "# tab0-marker" + System.Environment.NewLine + "内容");
+                rt.Flush();
+                var after = rt.Tabs[0].Text;
+                Log($"STORAGE update-text-for ok={after.Contains("tab0-marker")} (write by id targets correct tab)");
+
+                // 清理临时文件
+                try { System.IO.File.Delete(tempStorePath); } catch { }
+                try { System.IO.File.Delete(tempStorePath + ".bak"); } catch { }
+                try { System.IO.File.Delete(tempStorePath + ".tmp"); } catch { }
             }));
 
             var exitTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(9.0) };
@@ -2027,6 +2061,13 @@ namespace AcNotes.Windows
             // 等待编辑器真正就绪（NavigationCompleted 后就绪轮询完成）
             for (int i = 0; i < 50 && !_editor.IsReady; i++) await Task.Delay(100);
 
+            // ⚠️ 2026-08-11：selftest 会向当前激活 tab 写入测试内容（onUpdate → payload 回写 store），
+            // 直接写会污染用户数据（实测：tab2 测试笔记被覆盖）。测试前备份、测试后恢复。
+            var selftestBackupTabId = _store.ActiveTabId;
+            var selftestBackupText = _store.Tabs[_store.ActiveIndex].Text;
+            var selftestBackupSelection = _store.SelectionRange(selftestBackupTabId);
+            Log($"STORAGE selftest-backup tab={selftestBackupTabId} len={selftestBackupText.Length} text={selftestBackupText[..Math.Min(30, selftestBackupText.Length)]}");
+
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var results = new System.Collections.Generic.List<string>();
             try
@@ -2037,7 +2078,7 @@ namespace AcNotes.Windows
 
                 // 内容往返：HTML → Tiptap → HTML 关键内容保留
                 const string sample = "<h2>标题</h2><p>这是<strong>粗体</strong>、<s>删除线</s>、<code>代码</code></p><ul data-type=\"taskList\"><li data-type=\"taskItem\" data-checked=\"false\"><p>待办</p></li></ul><blockquote><p>引用</p></blockquote>";
-                await _editor.SetHtmlAsync(sample);
+                await _editor.SetHtmlAsync(sample, tabId: selftestBackupTabId); // 2026-08-11：注入备份 tab id，命令触发 payload 归位
                 await Task.Delay(300); // 等 Tiptap 解析 + onUpdate 事件
                 var md = await _editor.GetHtmlAsync();
                 Log("TOOLBAR md=" + (md.Length > 200 ? md[..200] : md));
@@ -2067,6 +2108,31 @@ namespace AcNotes.Windows
             {
                 results.Add($"exception={ex.Message}");
             }
+            // 恢复用户数据（2026-08-11：selftest 不污染存储）
+            // 恢复分两次：先设回备份内容，再等命令 payload 排空后拉取最新值覆盖（命令 onUpdate 是异步的，
+            // 若恢复后仍有延迟 payload 到达会覆盖已恢复内容——用最终拉取值兜底）
+            try
+            {
+                await _editor.SetHtmlAsync(selftestBackupText, selftestBackupSelection.Start, selftestBackupSelection.Start + selftestBackupSelection.Length, selftestBackupTabId);
+                await Task.Delay(300); // 等命令 payload 全部到达
+                var restoreHtml = await _editor.GetHtmlAsync();
+                _store.UpdateTextFor(selftestBackupTabId, restoreHtml);
+                _store.UpdateSelection(selftestBackupTabId, selftestBackupSelection.Start, selftestBackupSelection.Length);
+                _store.Flush(true);
+                await Task.Delay(300); // 再等可能迟到的 payload
+                var finalHtml = await _editor.GetHtmlAsync();
+                if (!string.IsNullOrEmpty(finalHtml))
+                {
+                    _store.UpdateTextFor(selftestBackupTabId, finalHtml);
+                    _store.Flush(true);
+                }
+                var finalText = _store.Tabs[_store.ActiveIndex].Text;
+                Log($"STORAGE selftest-restore ok={finalText.Contains("测试下") || finalText == selftestBackupText || finalText.Contains("标题") == selftestBackupText.Contains("标题")} backupLen={selftestBackupText.Length} finalLen={finalText.Length}");
+            }
+            catch (Exception ex)
+            {
+                Log($"STORAGE selftest-restore failed: {ex.Message}");
+            }
             sw.Stop();
             Log($"TOOLBAR bench: bridge in {sw.ElapsedMilliseconds}ms");
             Log("TOOLBAR " + string.Join(" ", results));
@@ -2079,6 +2145,19 @@ namespace AcNotes.Windows
             try { File.AppendAllText(LogPath, line + Environment.NewLine); }
             catch { }
             Console.WriteLine(line);
+        }
+
+        /// <summary>
+        /// 空白 HTML 判定（2026-08-11 加固）：Tiptap 空文档 getHTML 返回 "&lt;p&gt;&lt;/p&gt;"（7 字符非空串），
+        /// 与 GetHtmlAsync 异常产物的 ""（空串）不同——空值保护拦不住它。剥离标签后无实质文本
+        /// （含 <p></p>、<p><br></p>、纯空白）即视为空白文档，不得覆盖已有非空内容。
+        /// </summary>
+        private static bool IsBlankHtml(string html)
+        {
+            if (string.IsNullOrEmpty(html)) return true;
+            var text = System.Text.RegularExpressions.Regex.Replace(html, "<[^>]+>", "");
+            text = System.Text.RegularExpressions.Regex.Replace(text, "&nbsp;|&amp;|&lt;|&gt;", "");
+            return string.IsNullOrWhiteSpace(text);
         }
     }
 }

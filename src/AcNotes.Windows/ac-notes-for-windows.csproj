@@ -30,12 +30,12 @@
     <None Update="Assets\footer-sea.png" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\footer-tree.png" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\animal_icon.png" CopyToOutputDirectory="PreserveNewest" />
-    <None Update="Assets\ZCOOLKuaiLe-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\ZCOOLKuaiLe-Regular.ttf" CopyToOutputDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <None Update="Assets\leaf.png" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\icon-chat.png" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\item-001.png" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\icon-design.png" CopyToOutputDirectory="PreserveNewest" />
-    <None Update="Assets\icon-design.ico" CopyToOutputDirectory="PreserveNewest" />
-    <None Update="Assets\cursor-hand.cur" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\icon-design.ico" CopyToOutputDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Update="Assets\cursor-hand.cur" CopyToOutputDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 </Project>

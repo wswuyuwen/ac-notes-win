@@ -58,6 +58,7 @@ namespace AcNotes.Windows
         }
 
         private readonly string _archivePath;
+        private readonly bool _useRegistry;   // 2026-08-11：selftest 临时 store 置 false，完全隔离用户注册表副本
         private readonly object _lock = new();        // 内存数据 + 写队列状态
         private readonly object _writeLock = new();   // 磁盘写串行化（写线程 / Flush 互斥）
         private PersistedNotes? _pendingWrite;        // 最新待写快照（合并写：只保留最新）
@@ -67,10 +68,17 @@ namespace AcNotes.Windows
         public List<NoteTab> Tabs { get; private set; } = new();
         public Guid ActiveTabId { get; private set; }
 
-        public NoteStore()
+        public NoteStore() : this(null, true) { }
+
+        /// <summary>
+        /// archivePath 可注入（selftest 用独立临时路径，不污染用户数据，2026-08-11）。
+        /// useRegistry=false 时读写均绕过注册表副本（selftest 隔离，防临时数据污染用户注册表键）。
+        /// </summary>
+        public NoteStore(string? archivePath, bool useRegistry = true)
         {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            _archivePath = Path.Combine(appData, "AcNotes", "notes.json");
+            _archivePath = archivePath ?? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AcNotes", "notes.json");
+            _useRegistry = useRegistry;
 
             var snapshot = LoadLatestSnapshot();
             var storedTabs = snapshot?.Tabs ?? new List<NoteTab>();
@@ -98,10 +106,45 @@ namespace AcNotes.Windows
             lock (_lock)
             {
                 if (Tabs[ActiveIndex].Text == nextText) return;
+                // 空值保护（2026-08-11 排查"退出后选中 tab 内容丢失"）：
+                // GetHtmlAsync 在编辑器未就绪/异常时返回 ""（Tiptap 空文档 getHTML 返回 <p></p> 而非 ""），
+                // 退出路径 SaveEditorStateAsync 拿 "" 调 UpdateText 会把已有内容清空 → Flush 落盘空 → 重启丢失。
+                // 空串一律不覆盖非空内容；用户真清空笔记时 Tiptap 给的是 <p></p> 不是 ""。
+                if (string.IsNullOrEmpty(nextText) && !string.IsNullOrEmpty(Tabs[ActiveIndex].Text))
+                {
+                    Console.WriteLine("[NoteStore] UpdateText rejected empty (would wipe existing content)");
+                    return;
+                }
                 Tabs[ActiveIndex].Text = nextText;
                 ClampSelectionFor(ActiveTabId);
             }
             ScheduleSave();
+        }
+
+        /// <summary>
+        /// 按 tab id 写入内容（2026-08-11 新增，解决标签切换竞态错写）：
+        /// 编辑器 onUpdate 上报的 payload 携带来源 tab id，按 id 定位写入，避免切 tab 瞬间
+        /// 旧 tab 的延迟 payload 被写进新 tab（原 UpdateText 固定写 ActiveTabId）。
+        /// 空值保护同 UpdateText。
+        /// </summary>
+        public void UpdateTextFor(Guid id, string nextText)
+        {
+            bool changed = false;
+            lock (_lock)
+            {
+                var index = Tabs.FindIndex(t => t.Id == id);
+                if (index < 0) return;
+                if (Tabs[index].Text == nextText) return;
+                if (string.IsNullOrEmpty(nextText) && !string.IsNullOrEmpty(Tabs[index].Text))
+                {
+                    Console.WriteLine("[NoteStore] UpdateTextFor rejected empty (would wipe existing content)");
+                    return;
+                }
+                Tabs[index].Text = nextText;
+                ClampSelectionFor(id);
+                changed = true;
+            }
+            if (changed) ScheduleSave();
         }
 
         public void AddTab()
@@ -317,11 +360,14 @@ namespace AcNotes.Windows
                         Console.WriteLine($"[NoteStore] file persist failed: {ex}");
                         return false;
                     }
-                    // 注册表兼容副本（次要通道：失败记录但不阻塞主存档）
-                    try { Registry.SetValue(RegistryRootKey, RegistryJsonKey, json); }
-                    catch (Exception ex)
+                    // 注册表兼容副本（次要通道：失败记录但不阻塞主存档；selftest 临时 store 跳过，防污染用户键）
+                    if (_useRegistry)
                     {
-                        Console.WriteLine($"[NoteStore] registry persist failed: {ex.Message}");
+                        try { Registry.SetValue(RegistryRootKey, RegistryJsonKey, json); }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[NoteStore] registry persist failed: {ex.Message}");
+                        }
                     }
                 }
                 return true;
@@ -385,15 +431,18 @@ namespace AcNotes.Windows
                 }
             }
 
-            try
+            if (_useRegistry)
             {
-                var regJson = Registry.GetValue(RegistryRootKey, RegistryJsonKey, null) as string;
-                if (!string.IsNullOrEmpty(regJson))
+                try
                 {
-                    fromRegistry = JsonSerializer.Deserialize<PersistedNotes>(regJson, JsonOpts);
+                    var regJson = Registry.GetValue(RegistryRootKey, RegistryJsonKey, null) as string;
+                    if (!string.IsNullOrEmpty(regJson))
+                    {
+                        fromRegistry = JsonSerializer.Deserialize<PersistedNotes>(regJson, JsonOpts);
+                    }
                 }
+                catch { }
             }
-            catch { }
 
             return (fromFile, fromRegistry) switch
             {
