@@ -246,6 +246,19 @@ function ts() {
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+// 2026-08-14：页面关闭/导航前上报最后一次内容（关机/退出兜底——尽力而为：
+// 系统强杀浏览器进程时页面脚本可能来不及执行，但正常关闭/导航/WebView2 回收场景可补最后 payload，
+// 缩窄"最后一次 onUpdate payload 到进程终止"之间的丢失窗口）
+window.addEventListener('pagehide', () => {
+  try {
+    window.chrome.webview.postMessage({
+      type: 'content',
+      html: window.__editor.getHTML(),
+      tabId: window.__currentTabId,
+    });
+  } catch (e) { /* 尽力而为，失败不影响 */ }
+});
+
 window.__ready = true;
 </script>
 </body>

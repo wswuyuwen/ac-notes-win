@@ -460,6 +460,7 @@ namespace AcNotes.Windows
         private bool _pinOpen;      // 点击展开固定：托盘/菜单展开后不因鼠标位置自动收起（用户 2026-08-04 修复）
         private DateTime _pinOpenAt; // 点击展开时刻（抑制点托盘那次的 MouseUp，防展开瞬间被点击外部收起）
         private bool _closingFlushStarted;
+        private DateTime _lastPersistAlertAt = DateTime.MinValue; // 写盘失败告警节流（2026-08-14）
         private Button? _settingsButton; // 设置菜单锚点（纯代码构建无 Name 注册，用字段引用）
 
         // ---- Win32 ----
@@ -539,6 +540,18 @@ namespace AcNotes.Windows
 
             BuildUi();
             BuildTray();
+
+            // 2026-08-14：写盘失败托盘气泡告警（防静默丢数据；节流与跨线程调度见 OnPersistFailed）
+            _store.PersistFailed += OnPersistFailed;
+
+            // 2026-08-14：周期兜底落盘（5 分钟一次，仅在内存与磁盘不一致时写）——
+            // 防 WriteLoop 静默挂死/被系统抑制后，内存与磁盘差距持续累积（FlushIfDirty 空转零开销）
+            var flushTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMinutes(5),
+            };
+            flushTimer.Tick += (_, _) => { try { _store.FlushIfDirty(); } catch { } };
+            flushTimer.Start();
 
             _collapseTimer.Interval = TimeSpan.FromSeconds(CollapseDelay);
             _collapseTimer.Tick += (_, _) =>
@@ -1608,7 +1621,7 @@ namespace AcNotes.Windows
         /// <summary>
         /// 关机/注销/睡眠兜底：内存已由 ContentPayloadReceived 推路径实时同步（唯一事实源），
         /// 不依赖 WebView2 跨进程拉取（关机时浏览器进程可能已被系统终止）。
-        /// 仅用 300ms 极短窗口尽力补一次 postMessage 的最后毫秒延迟，超时直接用内存快照落盘。
+        /// 仅用极短窗口尽力补一次 postMessage 的最后毫秒延迟，超时直接用内存快照落盘。
         /// </summary>
         private void FlushForShutdown()
         {
@@ -1618,20 +1631,48 @@ namespace AcNotes.Windows
                 return;
             }
 
+            // 2026-08-14 加固：关机兜底绝不允许无限等待——
+            // ① Dispatcher.Invoke 显式 200ms 超时：无超时版本在 UI 线程忙时会卡住不返回，
+            //    SessionEnding 处理器不返回 → Win10 关机超时（默认 5s 级）强杀进程 → 连 Flush 都没执行，
+            //    丢"最后一次实时落盘"之后的全部编辑（实测卡死时 catch 兜底不触发，Invoke 不抛异常）
+            // ② 拉取只作锦上添花：内存快照本就是推路径实时同步的唯一事实源，
+            //    拉取超时/失败（浏览器进程先死时 ExecuteScriptAsync 挂起）直接用内存快照落盘
             Task<string>? htmlTask = null;
             try
             {
-                Dispatcher.Invoke(() => { htmlTask = _editor.GetHtmlAsync(); });
+                Dispatcher.Invoke(() => { htmlTask = _editor.GetHtmlAsync(); }, TimeSpan.FromMilliseconds(200));
             }
             catch { }
 
-            try { htmlTask?.Wait(TimeSpan.FromMilliseconds(300)); } catch { }
-
-            if (htmlTask?.IsCompletedSuccessfully == true)
+            if (htmlTask != null)
             {
-                _store.UpdateText(htmlTask.Result);
+                try { htmlTask.Wait(TimeSpan.FromMilliseconds(200)); } catch { }
+                if (htmlTask.IsCompletedSuccessfully)
+                {
+                    _store.UpdateText(htmlTask.Result);
+                }
             }
             _store.Flush(true);
+        }
+
+        /// <summary>
+        /// 写盘失败告警（2026-08-14）：托盘气泡提示用户检查磁盘空间/权限（防静默丢数据）。
+        /// 节流 30s 防每次编辑重复轰炸；事件可能来自写线程（ThreadPool），先调度回 UI 线程再弹。
+        /// </summary>
+        private void OnPersistFailed(string reason)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                try { Dispatcher.BeginInvoke(() => OnPersistFailed(reason)); } catch { }
+                return;
+            }
+            if ((DateTime.Now - _lastPersistAlertAt).TotalSeconds < 30) return;
+            _lastPersistAlertAt = DateTime.Now;
+            try
+            {
+                _trayIcon?.ShowBalloonTip(5000, "随手记 - 保存失败", reason, System.Windows.Forms.ToolTipIcon.Warning);
+            }
+            catch { }
         }
 
         private async Task LoadTabAsync(Guid id)

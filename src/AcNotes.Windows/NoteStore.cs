@@ -64,6 +64,14 @@ namespace AcNotes.Windows
         private PersistedNotes? _pendingWrite;        // 最新待写快照（合并写：只保留最新）
         private bool _writeRunning;                   // 写线程是否活跃
         private DeletedNote? _recentlyDeleted;
+        private DateTime _lastModifiedAt = DateTime.MinValue;  // 内存最后修改时刻（2026-08-14，周期兜底判脏）
+        private DateTime _lastPersistedAt = DateTime.MinValue; // 磁盘最后成功落盘时刻（2026-08-14）
+
+        /// <summary>
+        /// 磁盘写盘失败通知（2026-08-14：写盘失败静默无告警，用户无感知持续输入 → 关机全丢。
+        /// UI 侧弹托盘气泡提醒；事件可在任意线程触发，订阅方负责跨线程调度与节流）
+        /// </summary>
+        public event Action<string>? PersistFailed;
 
         public List<NoteTab> Tabs { get; private set; } = new();
         public Guid ActiveTabId { get; private set; }
@@ -294,11 +302,25 @@ namespace AcNotes.Windows
         {
             lock (_lock)
             {
+                _lastModifiedAt = DateTime.Now; // 所有修改路径统一经此标记（2026-08-14）
                 _pendingWrite = TakeSnapshot(); // 覆盖式合并：只保留最新快照
                 if (_writeRunning) return;      // 写线程活跃：写完会再取 pending
                 _writeRunning = true;
             }
             ThreadPool.QueueUserWorkItem(WriteLoop);
+        }
+
+        /// <summary>
+        /// 周期兜底落盘（2026-08-14）：仅在内存与磁盘不一致时写（防空转刷盘）。
+        /// 防 WriteLoop 静默挂死/被系统抑制后，内存与磁盘差距持续累积。
+        /// </summary>
+        public void FlushIfDirty()
+        {
+            lock (_lock)
+            {
+                if (_pendingWrite == null && _lastPersistedAt >= _lastModifiedAt) return;
+            }
+            Flush(true);
         }
 
         /// <summary>后台写线程：串行消费 pending 快照，写失败保留待重试（禁止静默丢失）</summary>
@@ -358,6 +380,7 @@ namespace AcNotes.Windows
                     {
                         try { File.Delete(_archivePath + ".tmp"); } catch { }
                         Console.WriteLine($"[NoteStore] file persist failed: {ex}");
+                        try { PersistFailed?.Invoke($"磁盘写入失败：{ex.Message}（请检查磁盘空间与权限）"); } catch { }
                         return false;
                     }
                     // 注册表兼容副本（次要通道：失败记录但不阻塞主存档；selftest 临时 store 跳过，防污染用户键）
@@ -370,11 +393,13 @@ namespace AcNotes.Windows
                         }
                     }
                 }
+                _lastPersistedAt = DateTime.Now; // 2026-08-14：成功落盘时刻（周期兜底判脏依据）
                 return true;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[NoteStore] serialize failed: {ex}");
+                try { PersistFailed?.Invoke($"笔记序列化失败：{ex.Message}"); } catch { }
                 return false;
             }
         }
@@ -419,16 +444,17 @@ namespace AcNotes.Windows
             // 主存档 → .bak（上次成功快照）→ .tmp（崩溃恢复）逐级回退：
             // - 主文件损坏（写坏/半写）→ 回退 .bak
             // - 主+备份均缺失但 .tmp 存在 = 写 tmp 成功、Move 前崩溃（首写/重写）→ 恢复 .tmp
+            // - 2026-08-14 加固：主文件存在但【旧】、.tmp 更新（写盘被中断残留）→ 用 .tmp 并补 Move。
+            //   此前只处理"主文件缺失"场景，导致关机/断电瞬间中断的写盘（tmp 写完 Move 前进程被杀）
+            //   在下次启动时被忽略，静默丢失最新快照。
             fromFile = TryLoadFile(_archivePath);
             if (fromFile == null) fromFile = TryLoadFile(_archivePath + ".bak");
-            if (fromFile == null)
+            var tmpPath = _archivePath + ".tmp";
+            var fromTmp = TryLoadFile(tmpPath);
+            if (fromTmp != null && (fromFile == null || fromTmp.SavedAt > fromFile.SavedAt))
             {
-                var tmpPath = _archivePath + ".tmp";
-                fromFile = TryLoadFile(tmpPath);
-                if (fromFile != null)
-                {
-                    try { File.Move(tmpPath, _archivePath, overwrite: true); } catch { }
-                }
+                fromFile = fromTmp;
+                try { File.Move(tmpPath, _archivePath, overwrite: true); } catch { }
             }
 
             if (_useRegistry)
@@ -444,13 +470,20 @@ namespace AcNotes.Windows
                 catch { }
             }
 
-            return (fromFile, fromRegistry) switch
+            var chosen = (fromFile, fromRegistry) switch
             {
                 (not null, not null) => fromFile.SavedAt >= fromRegistry.SavedAt ? fromFile : fromRegistry,
                 (not null, _) => fromFile,
                 (_, not null) => fromRegistry,
                 _ => null,
             };
+            // 2026-08-14：启动审计日志——各副本 SavedAt 对比（日后丢数据时能快速定位加载了哪个副本、各副本新旧）
+            try
+            {
+                Console.WriteLine($"[NoteStore] load-audit main={TryLoadFile(_archivePath)?.SavedAt} bak={TryLoadFile(_archivePath + ".bak")?.SavedAt} tmp={TryLoadFile(_archivePath + ".tmp")?.SavedAt} registry={fromRegistry?.SavedAt} chosen={chosen?.SavedAt}");
+            }
+            catch { }
+            return chosen;
         }
 
         private static PersistedNotes? TryLoadFile(string path)
